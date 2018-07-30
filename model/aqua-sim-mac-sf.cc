@@ -110,7 +110,6 @@ AquaSimSF::SendPkt(Ptr<Packet> pkt)
     		case SLEEP:
       			PowerOn();
     		case NIDLE:
-      			//m_device->SetTransmissionStatus(SEND);
       			asHeader.SetTimeStamp(Simulator::Now());
       			pkt->AddHeader(asHeader);
       			SendDown(pkt);
@@ -238,54 +237,16 @@ AquaSimSF::RecvProcess(Ptr<Packet> pkt)
   	if( ptag.GetPacketType() == AquaSimPtTag::PT_FAMA ) {
       		switch( FamaH.GetPType() ) {
 			case FamaHeader::RTS:
-				//ProcessRTS(FamaH.GetSA());
 				ProcessRTS(FamaH);
-				/*
-          			if( dst == m_device->GetAddress() ) {
-	      				ProcessRTS(FamaH.GetSA());
-	  			}
-	  			DoRemote(m_CTSTxTime+2*m_maxPropDelay+m_estimateError);
-	  			
-				*/
 				break;
-
 			case FamaHeader::CTS:
 				ProcessCTS(FamaH);
-			/*	
-          			if(m_waitCTSTimer.IsRunning()) {
-              				m_waitCTSTimer.Cancel();
-            
-              				if(dst == m_device->GetAddress()) {
-                  				SendDataPkt();
-              				}
-              				else {
-                  				DoBackoff();
-              				} 
-          			}		 
-
-          			// this CTS must not be for this node
-            			DoRemote(2*m_maxPropDelay+m_estimateError);
-	  		*/	
-
           			break;
 			default:
           			//process Data packet
           			if(ProcessDATA(FamaH, pkt))
 					return true;
           			
-				/*
-	  			if( dst == m_device->GetAddress() ) {
-	        			//ptag.SetPacketType(UpperLayerPktType);
-                			NS_LOG_INFO("Process Data Packet!!!!");
-	    				SFStatus = WAIT_DATA_FINISH;
-					//m_device->SetTransmissionStatus(RECV);
-					SendUp(pkt);
-	    				return true;
-	  			}
-	  			else {
-					DoRemote(m_maxPropDelay+m_estimateError);
-	  			}
-				*/
       		}
   	}
 
@@ -445,21 +406,15 @@ AquaSimSF::SendRTS(Time DeltaTime)
 
 
 void
-//AquaSimSF::ProcessRTS(AquaSimAddress sa)
 AquaSimSF::ProcessRTS(FamaHeader FamaH)
 {
-  	//FamaHeader FamaH;
-  	//pkt->PeekHeader(FamaH);
   	if( FamaH.GetDA() == m_device->GetAddress() ) 
 	{
 		SendPkt(MakeCTS(FamaH.GetSA()));
-		//SendPkt( MakeCTS(sa) );
   		SFStatus = WAIT_DATA;
 	}
 
 	DoRemote(m_CTSTxTime+2*m_maxPropDelay+m_estimateError);	 
-	//SendPkt( MakeCTS(sa) );
-  	//SFStatus = WAIT_DATA;
 }
 
 
@@ -519,7 +474,6 @@ AquaSimSF::ProcessDATA(FamaHeader FamaH, Ptr<Packet> pkt)
 		//ptag.SetPacketType(UpperLayerPktType);
                 NS_LOG_INFO("Process Data Packet!!!!");
 	    	SFStatus = WAIT_DATA_FINISH;
-		//m_device->SetTransmissionStatus(RECV);
 		SendUp(pkt);
 	    	return true;
 	}
@@ -549,7 +503,6 @@ AquaSimSF::DoBackoff()
       		m_backoffTimer.Cancel();
   	}
 
-  	//m_backoffTimer.SetDelay(backoffTime);
   	NS_LOG_FUNCTION("m_backoffTimer.GetDelay() : " << m_backoffTimer.GetDelayLeft());
   	m_backoffTimer.SetFunction(&AquaSimSF::BackoffTimerExpire,this);
   	m_backoffTimer.Schedule(backoffTime);
@@ -567,7 +520,6 @@ AquaSimSF::DoRemote(Time DeltaTime)
 		if( m_remoteTimer.IsRunning() ) {
 	  		m_remoteTimer.Cancel();
       		}
-      		//m_remoteTimer.SetDelay(DeltaTime);
       		m_remoteTimer.SetFunction(&AquaSimSF::ProcessRemoteTimer,this);
       		m_remoteTimer.Schedule(DeltaTime);
       		NS_LOG_FUNCTION("m_remoteTimer.GetDelay() : " << m_remoteTimer.GetDelayLeft());
