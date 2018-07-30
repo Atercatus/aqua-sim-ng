@@ -18,7 +18,7 @@
  * Author: Robert Martin <robert.martin@engr.uconn.edu>
  */
 
-#include "aqua-sim-mac-fama.h"
+#include "aqua-sim-mac-sf.h"
 #include "aqua-sim-header.h"
 #include "aqua-sim-header-mac.h"
 #include "aqua-sim-pt-tag.h"
@@ -33,15 +33,15 @@
 
 namespace ns3 {
 
-NS_LOG_COMPONENT_DEFINE("AquaSimFama");
-NS_OBJECT_ENSURE_REGISTERED(AquaSimFama);
+NS_LOG_COMPONENT_DEFINE("AquaSimSF");
+NS_OBJECT_ENSURE_REGISTERED(AquaSimSF);
 
 
-AquaSimFama::AquaSimFama(): FamaStatus(PASSIVE), m_NDPeriod(4.0), m_maxBurst(1),
+AquaSimSF::AquaSimSF(): SFStatus(PASSIVE), m_NDPeriod(4.0), m_maxBurst(1),
 		m_dataPktInterval(0.0001), m_estimateError(0.001),m_dataPktSize(1600),
 		m_neighborId(0), m_waitCTSTimer(Timer::CHECK_ON_DESTROY),//(Timer::CANCEL_ON_DESTROY),
 		m_backoffTimer(Timer::CANCEL_ON_DESTROY), m_remoteTimer(Timer::CANCEL_ON_DESTROY),
-		m_remoteExpireTime(-1), m_famaNDCounter(2)
+		m_remoteExpireTime(-1), m_sfNDCounter(2)
 		//, backoff_timer(this), status_handler(this), NDTimer(this),
 		//WaitCTSTimer(this),DataBackoffTimer(this),RemoteTimer(this), CallBack_Handler(this)
 {
@@ -53,28 +53,28 @@ AquaSimFama::AquaSimFama(): FamaStatus(PASSIVE), m_NDPeriod(4.0), m_maxBurst(1),
   	m_maxDataTxTime = MilliSeconds(m_dataPktSize/m_bitRate);  //1600bits/10kbps
 
   	m_rand = CreateObject<UniformRandomVariable> ();
-  	Simulator::Schedule(Seconds(m_rand->GetValue(0.0,m_NDPeriod)+0.000001), &AquaSimFama::NDTimerExpire, this);
+  	Simulator::Schedule(Seconds(m_rand->GetValue(0.0,m_NDPeriod)+0.000001), &AquaSimSF::NDTimerExpire, this);
 }
 
-AquaSimFama::~AquaSimFama()
+AquaSimSF::~AquaSimSF()
 {
 }
 
 TypeId
-AquaSimFama::GetTypeId(void)
+AquaSimSF::GetTypeId(void)
 {
-  	static TypeId tid = TypeId("ns3::AquaSimFama")
+  	static TypeId tid = TypeId("ns3::AquaSimSF")
       				.SetParent<AquaSimMac>()
-      				.AddConstructor<AquaSimFama>()
+      				.AddConstructor<AquaSimSF>()
       				.AddAttribute("MaxBurst", "The maximum number of packet burst. default is 1",
 						IntegerValue(1),
-						MakeIntegerAccessor (&AquaSimFama::m_maxBurst),
+						MakeIntegerAccessor (&AquaSimSF::m_maxBurst),
 						MakeIntegerChecker<int>());
   	return tid;
 }
 
 int64_t
-AquaSimFama::AssignStreams (int64_t stream)
+AquaSimSF::AssignStreams (int64_t stream)
 {
   	NS_LOG_FUNCTION (this << stream);
   	m_rand->SetStream(stream);
@@ -82,19 +82,19 @@ AquaSimFama::AssignStreams (int64_t stream)
 }
 
 void
-AquaSimFama::NDTimerExpire()
+AquaSimSF::NDTimerExpire()
 {
   	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
   	SendPkt(MakeND());
-  	m_famaNDCounter--;
+  	m_sfNDCounter--;
 
-  	if (m_famaNDCounter > 0) {
-    		Simulator::Schedule(Seconds(m_rand->GetValue(0.0,m_NDPeriod)), &AquaSimFama::NDTimerExpire, this);
+  	if (m_sfNDCounter > 0) {
+    		Simulator::Schedule(Seconds(m_rand->GetValue(0.0,m_NDPeriod)), &AquaSimSF::NDTimerExpire, this);
 	}
 }
 
 void
-AquaSimFama::SendPkt(Ptr<Packet> pkt)
+AquaSimSF::SendPkt(Ptr<Packet> pkt)
 {
   	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
 
@@ -127,7 +127,7 @@ AquaSimFama::SendPkt(Ptr<Packet> pkt)
 }
 
 bool
-AquaSimFama::TxProcess(Ptr<Packet> pkt)
+AquaSimSF::TxProcess(Ptr<Packet> pkt)
 {
   	//callback to higher level, should be implemented differently
   	//Scheduler::instance().schedule(&CallBack_Handler, &m_callbackEvent, CALLBACK_DELAY);
@@ -172,7 +172,7 @@ AquaSimFama::TxProcess(Ptr<Packet> pkt)
 
 
   	//fill the next hop when sending out the packet;
-  	if( (PktQ.size() == 1) /*the pkt is the first one*/ && FamaStatus == PASSIVE ) {
+  	if( (PktQ.size() == 1) /*the pkt is the first one*/ && SFStatus == PASSIVE ) {
       		if( CarrierDected() ) {
 	 		DoRemote(2*m_maxPropDelay+m_estimateError);
       		}
@@ -185,7 +185,7 @@ AquaSimFama::TxProcess(Ptr<Packet> pkt)
 
 
 bool
-AquaSimFama::RecvProcess(Ptr<Packet> pkt)
+AquaSimSF::RecvProcess(Ptr<Packet> pkt)
 {
  
 
@@ -238,13 +238,20 @@ AquaSimFama::RecvProcess(Ptr<Packet> pkt)
   	if( ptag.GetPacketType() == AquaSimPtTag::PT_FAMA ) {
       		switch( FamaH.GetPType() ) {
 			case FamaHeader::RTS:
+				//ProcessRTS(FamaH.GetSA());
+				ProcessRTS(FamaH);
+				/*
           			if( dst == m_device->GetAddress() ) {
 	      				ProcessRTS(FamaH.GetSA());
 	  			}
 	  			DoRemote(m_CTSTxTime+2*m_maxPropDelay+m_estimateError);
-	  			break;
+	  			
+				*/
+				break;
 
 			case FamaHeader::CTS:
+				ProcessCTS(FamaH);
+			/*	
           			if(m_waitCTSTimer.IsRunning()) {
               				m_waitCTSTimer.Cancel();
             
@@ -258,19 +265,27 @@ AquaSimFama::RecvProcess(Ptr<Packet> pkt)
 
           			// this CTS must not be for this node
             			DoRemote(2*m_maxPropDelay+m_estimateError);
-	  
+	  		*/	
+
           			break;
 			default:
           			//process Data packet
+          			if(ProcessDATA(FamaH, pkt))
+					return true;
+          			
+				/*
 	  			if( dst == m_device->GetAddress() ) {
 	        			//ptag.SetPacketType(UpperLayerPktType);
                 			NS_LOG_INFO("Process Data Packet!!!!");
-	    				SendUp(pkt);
+	    				SFStatus = WAIT_DATA_FINISH;
+					//m_device->SetTransmissionStatus(RECV);
+					SendUp(pkt);
 	    				return true;
 	  			}
 	  			else {
 					DoRemote(m_maxPropDelay+m_estimateError);
 	  			}
+				*/
       		}
   	}
 
@@ -278,8 +293,10 @@ AquaSimFama::RecvProcess(Ptr<Packet> pkt)
   	return true;
 }
 
+
+
 void
-AquaSimFama::SendDataPkt()
+AquaSimSF::SendDataPkt()
 {
   	NS_LOG_FUNCTION("Call: " << AquaSimAddress::ConvertFrom(m_device->GetAddress()));
 
@@ -303,8 +320,8 @@ AquaSimFama::SendDataPkt()
         		NS_LOG_FUNCTION("StartTime: " << StartTime);
         		NS_LOG_FUNCTION("Simulator::Now(): " << Simulator::Now());
         		NS_LOG_FUNCTION("StartTime - Simulator::Now() => " << StartTime - Simulator::Now());
-			Simulator::Schedule(StartTime-Simulator::Now(),&AquaSimFama::ProcessDataSendTimer, this, tmp);
-			//Simulator::Schedule(Seconds(0), &AquaSimFama::ProcessDataSendTimer, this, tmp);
+			Simulator::Schedule(StartTime-Simulator::Now(),&AquaSimSF::ProcessDataSendTimer, this, tmp);
+			//Simulator::Schedule(Seconds(0), &AquaSimSF::ProcessDataSendTimer, this, tmp);
         		//PktQ.front()->PeekHeader(asHeader);
 			if( !PktQ.empty() ) {
 	  			StartTime += asHeader.GetTxTime() + m_dataPktInterval;
@@ -318,13 +335,13 @@ AquaSimFama::SendDataPkt()
     		}
   	}	
 
-  	FamaStatus = WAIT_DATA_FINISH;
+  	//SFStatus = WAIT_DATA_FINISH;
 
-  	Simulator::Schedule(m_maxPropDelay+StartTime-Simulator::Now(),&AquaSimFama::ProcessDataBackoffTimer,this);
+  	Simulator::Schedule(m_maxPropDelay+StartTime-Simulator::Now(),&AquaSimSF::ProcessDataBackoffTimer,this);
 }
 
 void
-AquaSimFama::ProcessDataSendTimer(Ptr<Packet> pkt)
+AquaSimSF::ProcessDataSendTimer(Ptr<Packet> pkt)
 {
   	NS_LOG_FUNCTION(this << pkt);
   	SendPkt(pkt);
@@ -332,17 +349,17 @@ AquaSimFama::ProcessDataSendTimer(Ptr<Packet> pkt)
 
 
 void
-AquaSimFama::ProcessDataBackoffTimer()
+AquaSimSF::ProcessDataBackoffTimer()
 {
   	if( !PktQ.empty() )
     		DoBackoff();
   	else
-    		FamaStatus = PASSIVE;
+    		SFStatus = PASSIVE;
 }
 
 
 Ptr<Packet>
-AquaSimFama::MakeND()
+AquaSimSF::MakeND()
 {
   	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
 
@@ -373,7 +390,7 @@ AquaSimFama::MakeND()
 
 
 void
-AquaSimFama::ProcessND(AquaSimAddress sa)
+AquaSimSF::ProcessND(AquaSimAddress sa)
 {
   	//FamaHeader FamaH;
   	//pkt->PeekHeader(FamaH);
@@ -382,7 +399,7 @@ AquaSimFama::ProcessND(AquaSimAddress sa)
 
 
 Ptr<Packet>
-AquaSimFama::MakeRTS(AquaSimAddress Recver)
+AquaSimSF::MakeRTS(AquaSimAddress Recver)
 {
   	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
   	Ptr<Packet> pkt = Create<Packet>();
@@ -412,34 +429,43 @@ AquaSimFama::MakeRTS(AquaSimAddress Recver)
 
 
 void
-AquaSimFama::SendRTS(Time DeltaTime)
+AquaSimSF::SendRTS(Time DeltaTime)
 {
   	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
   	AquaSimHeader asHeader;
   	PktQ.front()->PeekHeader(asHeader);
   	SendPkt( MakeRTS(asHeader.GetNextHop()) );
   	NS_LOG_FUNCTION("After SendPkt");
-  	FamaStatus = WAIT_CTS;
+  	SFStatus = WAIT_CTS;
   	NS_LOG_FUNCTION("m_waitCTSTimer : " << m_waitCTSTimer.GetDelayLeft());
   	NS_LOG_FUNCTION("DeltaTIme : " << DeltaTime);
-  	m_waitCTSTimer.SetFunction(&AquaSimFama::DoBackoff,this);
+  	m_waitCTSTimer.SetFunction(&AquaSimSF::DoBackoff,this);
   	m_waitCTSTimer.Schedule(DeltaTime);
 }
 
 
 void
-AquaSimFama::ProcessRTS(AquaSimAddress sa)
+//AquaSimSF::ProcessRTS(AquaSimAddress sa)
+AquaSimSF::ProcessRTS(FamaHeader FamaH)
 {
   	//FamaHeader FamaH;
   	//pkt->PeekHeader(FamaH);
-  	SendPkt( MakeCTS(sa) );
-  	FamaStatus = WAIT_DATA;
+  	if( FamaH.GetDA() == m_device->GetAddress() ) 
+	{
+		SendPkt(MakeCTS(FamaH.GetSA()));
+		//SendPkt( MakeCTS(sa) );
+  		SFStatus = WAIT_DATA;
+	}
+
+	DoRemote(m_CTSTxTime+2*m_maxPropDelay+m_estimateError);	 
+	//SendPkt( MakeCTS(sa) );
+  	//SFStatus = WAIT_DATA;
 }
 
 
 
 Ptr<Packet>
-AquaSimFama::MakeCTS(AquaSimAddress RTS_Sender)
+AquaSimSF::MakeCTS(AquaSimAddress RTS_Sender)
 {
   	NS_LOG_FUNCTION("Call : " <<  AquaSimAddress::ConvertFrom (m_device->GetAddress()) << "RTS Sender : " << RTS_Sender);
 
@@ -468,9 +494,43 @@ AquaSimFama::MakeCTS(AquaSimAddress RTS_Sender)
 	return pkt;
 }
 
+void
+AquaSimSF::ProcessCTS(FamaHeader FamaH)
+{
+	if(m_waitCTSTimer.IsRunning()) {
+        	m_waitCTSTimer.Cancel();
+            
+              	if(FamaH.GetDA() == m_device->GetAddress()) {
+                  	SendDataPkt();
+              	}
+              	else {
+                  	DoBackoff();
+            	} 
+     	}		 
+
+        // this CTS must not be for this node
+        DoRemote(2*m_maxPropDelay+m_estimateError);
+}
 
 bool
-AquaSimFama::CarrierDected()
+AquaSimSF::ProcessDATA(FamaHeader FamaH, Ptr<Packet> pkt)
+{	
+	if( FamaH.GetDA() == m_device->GetAddress() ) {
+		//ptag.SetPacketType(UpperLayerPktType);
+                NS_LOG_INFO("Process Data Packet!!!!");
+	    	SFStatus = WAIT_DATA_FINISH;
+		//m_device->SetTransmissionStatus(RECV);
+		SendUp(pkt);
+	    	return true;
+	}
+	else {
+		DoRemote(m_maxPropDelay+m_estimateError);
+		return false;
+	}
+}
+
+bool
+AquaSimSF::CarrierDected()
 {
   	if( m_device->GetTransmissionStatus() == RECV || m_device->GetTransmissionStatus() == SEND )  {
 	  	return true;
@@ -480,26 +540,26 @@ AquaSimFama::CarrierDected()
 }
 
 void
-AquaSimFama::DoBackoff()
+AquaSimSF::DoBackoff()
 {
   	Time backoffTime = MilliSeconds(m_rand->GetValue(0.0,10 * m_RTSTxTime.ToDouble(Time::MS)));
  
-  	FamaStatus = BACKOFF;
+  	SFStatus = BACKOFF;
   	if( m_backoffTimer.IsRunning() ) {
       		m_backoffTimer.Cancel();
   	}
 
   	//m_backoffTimer.SetDelay(backoffTime);
   	NS_LOG_FUNCTION("m_backoffTimer.GetDelay() : " << m_backoffTimer.GetDelayLeft());
-  	m_backoffTimer.SetFunction(&AquaSimFama::BackoffTimerExpire,this);
+  	m_backoffTimer.SetFunction(&AquaSimSF::BackoffTimerExpire,this);
   	m_backoffTimer.Schedule(backoffTime);
 }
 
 
 void
-AquaSimFama::DoRemote(Time DeltaTime)
+AquaSimSF::DoRemote(Time DeltaTime)
 {
-  	FamaStatus = REMOTE;
+  	SFStatus = REMOTE;
 
   	if( Simulator::Now()+DeltaTime > m_remoteExpireTime ) {
       		m_remoteExpireTime = Simulator::Now()+DeltaTime;
@@ -508,7 +568,7 @@ AquaSimFama::DoRemote(Time DeltaTime)
 	  		m_remoteTimer.Cancel();
       		}
       		//m_remoteTimer.SetDelay(DeltaTime);
-      		m_remoteTimer.SetFunction(&AquaSimFama::ProcessRemoteTimer,this);
+      		m_remoteTimer.SetFunction(&AquaSimSF::ProcessRemoteTimer,this);
       		m_remoteTimer.Schedule(DeltaTime);
       		NS_LOG_FUNCTION("m_remoteTimer.GetDelay() : " << m_remoteTimer.GetDelayLeft());
   	}
@@ -516,10 +576,10 @@ AquaSimFama::DoRemote(Time DeltaTime)
 
 
 void
-AquaSimFama::ProcessRemoteTimer()
+AquaSimSF::ProcessRemoteTimer()
 {
   	if( PktQ.empty() ) {
-    		FamaStatus = PASSIVE;
+    		SFStatus = PASSIVE;
   	}
   	else {
     		DoBackoff();
@@ -528,12 +588,12 @@ AquaSimFama::ProcessRemoteTimer()
 }
 
 void
-AquaSimFama::BackoffTimerExpire()
+AquaSimSF::BackoffTimerExpire()
 {
   	SendRTS(2*m_maxPropDelay + m_RTSTxTime + m_CTSTxTime +m_estimateError);
 }
 
-void AquaSimFama::DoDispose()
+void AquaSimSF::DoDispose()
 {
 	m_rand=0;
 	while(!PktQ.empty()) {

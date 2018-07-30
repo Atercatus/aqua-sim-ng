@@ -75,6 +75,8 @@ def build(bld):
         'model/aqua-sim-routing-dummy.cc',
         'model/aqua-sim-routing-ddbr.cc',
         'model/lib/svm.cpp',
+	'model/aqua-sim-mac-sf.cc',
+	'model/aqua-sim-mac-slotsf.cc',
         ]
 
     module_test = bld.create_ns3_module_test_library('aqua-sim-ng')
@@ -152,6 +154,8 @@ def build(bld):
         'model/aqua-sim-routing-dummy.h',
         'model/aqua-sim-routing-ddbr.h',
         'model/lib/svm.h',
+	'model/aqua-sim-mac-sf.h',
+	'model/aqua-sim-mac-slotsf.h',
         ]
 
     if bld.env.ENABLE_EXAMPLES:
