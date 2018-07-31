@@ -94,13 +94,16 @@ protected:
   Ptr<Packet> MakeND(); //broadcast
   Ptr<Packet> MakeRTS(AquaSimAddress Recver);
   Ptr<Packet> MakeCTS(AquaSimAddress RTS_Sender);
+  Ptr<Packet> MakeRELAY_CTS(AquaSimAddress RTS_Sender);
 
   void ProcessND(AquaSimAddress sa);
-  void ProcessRTS(SFHeader sfh);
+  void ProcessRTS(SFHeader sfh, Ptr<Packet> pkt);
   void ProcessCTS(SFHeader sfh);
   bool ProcessDATA(SFHeader sfh, Ptr<Packet> pkt);
+  void ProcessRELAY_CTS(SFHeader sfh);
 
   void SendRTS(Time DeltaTime);
+  void SendCTS();
   void SendPkt(Ptr<Packet> pkt);
   void SendDataPkt();
 
@@ -122,12 +125,12 @@ protected:
 
 private:
   //sf-mac
-  std::queue<Ptr<Packet>> m_RTSQ;
-
+  std::queue<Ptr<Packet>> m_rtsQ;
+  Time m_RTSCPTime;
   int m_sfNDCounter;
   Ptr<UniformRandomVariable> m_rand;
 };
 
 }  // namespace ns3
 
-#endif /* AQUA_SIM_MAC_SF_H */
+#endif 
