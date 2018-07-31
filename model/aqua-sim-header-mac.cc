@@ -529,6 +529,110 @@ FamaHeader::GetInstanceTypeId(void) const
 }
 
 
+/*
+ * SFHeader
+ */
+SFHeader::SFHeader()
+{
+}
+
+SFHeader::~SFHeader()
+{
+}
+
+TypeId
+SFHeader::GetTypeId()
+{
+  static TypeId tid = TypeId("ns3::SFHeader")
+    .SetParent<Header>()
+    .AddConstructor<SFHeader>()
+  ;
+  return tid;
+}
+
+int
+SFHeader::size()
+{
+  return sizeof(AquaSimAddress)*4 + 1; /*for packet_type*/
+}
+void
+SFHeader::SetSA(AquaSimAddress sa)
+{
+  SA = sa;
+}
+void
+SFHeader::SetDA(AquaSimAddress da)
+{
+  DA = da;
+}
+void
+SFHeader::SetPType(uint8_t pType)
+{
+  m_pType = pType;
+}
+AquaSimAddress
+SFHeader::GetSA()
+{
+  return SA;
+}
+AquaSimAddress
+SFHeader::GetDA()
+{
+  return DA;
+}
+uint8_t
+SFHeader::GetPType()
+{
+  return m_pType;
+}
+
+uint32_t
+SFHeader::GetSerializedSize(void) const
+{
+  return 2+2+1;
+}
+void
+SFHeader::Serialize (Buffer::Iterator start) const
+{
+  start.WriteU16 (SA.GetAsInt());
+  start.WriteU16 (DA.GetAsInt());
+  //start.WriteU8 (SA.GetLength());
+  //start.WriteU8 (DA.GetLength());
+  start.WriteU8 (m_pType);
+}
+uint32_t
+SFHeader::Deserialize (Buffer::Iterator start)
+{
+  Buffer::Iterator i = start;
+  SA = (AquaSimAddress) i.ReadU16();
+  DA = (AquaSimAddress) i.ReadU16();
+  //ReadFrom(i, SA,8);	//read 8bit addr
+  //ReadFrom(i, DA, 8);	//read 8bit addr
+  m_pType = i.ReadU8();
+
+  return GetSerializedSize();
+}
+void
+SFHeader::Print (std::ostream &os) const
+{
+  os << "SF Header: SendAddress=" << SA << ", DestAddress=" << DA << ", PacketType=";
+  switch(m_pType)
+  {
+    case RTS: os << "RTS"; break;
+    case CTS: os << "CTS"; break;
+    case RELAY_CTS: os << "RELAY_CTS"; break;
+    case FAMA_DATA: os << "FAMA_DATA"; break;
+    case ND: os << "ND"; break;
+  }
+  os << "\n";
+}
+TypeId
+SFHeader::GetInstanceTypeId(void) const
+{
+  return GetTypeId();
+}
+
+
 
 /*
  * CopeHeader

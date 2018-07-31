@@ -96,9 +96,9 @@ protected:
   Ptr<Packet> MakeCTS(AquaSimAddress RTS_Sender);
 
   void ProcessND(AquaSimAddress sa);
-  void ProcessRTS(FamaHeader FamaH);
-  void ProcessCTS(FamaHeader FamaH);
-  bool ProcessDATA(FamaHeader FamaH, Ptr<Packet> pkt);
+  void ProcessRTS(SFHeader sfh);
+  void ProcessCTS(SFHeader sfh);
+  bool ProcessDATA(SFHeader sfh, Ptr<Packet> pkt);
 
   void SendRTS(Time DeltaTime);
   void SendPkt(Ptr<Packet> pkt);

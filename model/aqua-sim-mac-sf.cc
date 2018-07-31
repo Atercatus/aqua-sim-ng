@@ -139,12 +139,12 @@ AquaSimSF::TxProcess(Ptr<Packet> pkt)
   	//figure out how to cache the packet will be sent out!!!!!!!
   	AquaSimHeader asHeader;
 	VBHeader vbh;
-  	FamaHeader FamaH;
+  	SFHeader sfh;
 	MacHeader mach;
 	AquaSimPtTag ptag;
  	pkt->RemoveHeader(asHeader);
 	pkt->RemoveHeader(mach);
-  	pkt->RemoveHeader(FamaH);
+  	pkt->RemoveHeader(sfh);
 	pkt->RemovePacketTag(ptag);
 
 	asHeader.SetSize(m_dataPktSize);
@@ -159,11 +159,11 @@ AquaSimSF::TxProcess(Ptr<Packet> pkt)
 
   	vbh.SetTargetAddr(asHeader.GetNextHop());
 
-  	FamaH.SetPType(FamaHeader::FAMA_DATA);
-  	FamaH.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
-  	FamaH.SetDA(asHeader.GetNextHop());
+  	sfh.SetPType(SFHeader::FAMA_DATA);
+  	sfh.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+  	sfh.SetDA(asHeader.GetNextHop());
 
-	pkt->AddHeader(FamaH);
+	pkt->AddHeader(sfh);
 	pkt->AddHeader(mach);
   	pkt->AddHeader(asHeader);
 	pkt->AddPacketTag(ptag);
@@ -192,17 +192,17 @@ AquaSimSF::RecvProcess(Ptr<Packet> pkt)
 
   	AquaSimHeader asHeader;
 	MacHeader mach;
-  	FamaHeader FamaH;
+  	SFHeader sfh;
 	AquaSimPtTag ptag;
   	pkt->RemoveHeader(asHeader);
 	pkt->RemoveHeader(mach);
-  	pkt->PeekHeader(FamaH);
+  	pkt->PeekHeader(sfh);
 	pkt->PeekPacketTag(ptag);
 	pkt->AddHeader(mach);
 	pkt->AddHeader(asHeader);
-  	AquaSimAddress dst = FamaH.GetDA();
+  	AquaSimAddress dst = sfh.GetDA();
   
-  	NS_LOG_FUNCTION("FamaH: " << FamaH);
+  	NS_LOG_FUNCTION("SFHeader: " << sfh);
   
 
   	if( m_backoffTimer.IsRunning() ) {
@@ -217,8 +217,8 @@ AquaSimSF::RecvProcess(Ptr<Packet> pkt)
  	 /*ND is not a part of AquaSimFama. We just want to use it to get next hop
   	 *So we do not care wether it collides with others
   	 */
-  	if( ( ptag.GetPacketType() == AquaSimPtTag::PT_FAMA)&& (FamaH.GetPType()==FamaHeader::ND) ) {
-      		ProcessND(FamaH.GetSA());
+  	if( ( ptag.GetPacketType() == AquaSimPtTag::PT_FAMA)&& (sfh.GetPType()==SFHeader::ND) ) {
+      		ProcessND(sfh.GetSA());
       		pkt=0;
       		return false;
   	}
@@ -235,16 +235,16 @@ AquaSimSF::RecvProcess(Ptr<Packet> pkt)
   	}
 
   	if( ptag.GetPacketType() == AquaSimPtTag::PT_FAMA ) {
-      		switch( FamaH.GetPType() ) {
-			case FamaHeader::RTS:
-				ProcessRTS(FamaH);
+      		switch( sfh.GetPType() ) {
+			case SFHeader::RTS:
+				ProcessRTS(sfh);
 				break;
-			case FamaHeader::CTS:
-				ProcessCTS(FamaH);
+			case SFHeader::CTS:
+				ProcessCTS(sfh);
           			break;
 			default:
           			//process Data packet
-          			if(ProcessDATA(FamaH, pkt))
+          			if(ProcessDATA(sfh, pkt))
 					return true;
           			
       		}
@@ -327,7 +327,7 @@ AquaSimSF::MakeND()
   	Ptr<Packet> pkt = Create<Packet>();
   	AquaSimHeader asHeader;
 	MacHeader mach;
-  	FamaHeader FamaH;
+  	SFHeader sfh;
 	AquaSimPtTag ptag;
 
 	asHeader.SetSize(2*sizeof(AquaSimAddress)+1);
@@ -337,11 +337,11 @@ AquaSimSF::MakeND()
 	ptag.SetPacketType(AquaSimPtTag::PT_FAMA);
   	asHeader.SetNextHop(AquaSimAddress::GetBroadcast());
 
-  	FamaH.SetPType(FamaHeader::ND);
-  	FamaH.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
-  	FamaH.SetDA(AquaSimAddress::GetBroadcast());
+  	sfh.SetPType(SFHeader::ND);
+  	sfh.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+  	sfh.SetDA(AquaSimAddress::GetBroadcast());
 
-	pkt->AddHeader(FamaH);
+	pkt->AddHeader(sfh);
 	pkt->AddHeader(mach);
   	pkt->AddHeader(asHeader);
 	pkt->AddPacketTag(ptag);
@@ -366,7 +366,7 @@ AquaSimSF::MakeRTS(AquaSimAddress Recver)
   	Ptr<Packet> pkt = Create<Packet>();
   	AquaSimHeader asHeader;
 	MacHeader mach;
-  	FamaHeader FamaH;
+  	SFHeader sfh;
 	AquaSimPtTag ptag;
 
   	asHeader.SetSize(GetSizeByTxTime(m_RTSTxTime.ToDouble(Time::S)));
@@ -376,11 +376,11 @@ AquaSimSF::MakeRTS(AquaSimAddress Recver)
 	ptag.SetPacketType(AquaSimPtTag::PT_FAMA);
   	asHeader.SetNextHop(Recver);
 
-  	FamaH.SetPType(FamaHeader::RTS);
- 	FamaH.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
-  	FamaH.SetDA(Recver);
+  	sfh.SetPType(SFHeader::RTS);
+ 	sfh.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+  	sfh.SetDA(Recver);
 
-	pkt->AddHeader(FamaH);
+	pkt->AddHeader(sfh);
 	pkt->AddHeader(mach);
   	pkt->AddHeader(asHeader);
 	pkt->AddPacketTag(ptag);
@@ -406,11 +406,11 @@ AquaSimSF::SendRTS(Time DeltaTime)
 
 
 void
-AquaSimSF::ProcessRTS(FamaHeader FamaH)
+AquaSimSF::ProcessRTS(SFHeader sfh)
 {
-  	if( FamaH.GetDA() == m_device->GetAddress() ) 
+  	if( sfh.GetDA() == m_device->GetAddress() ) 
 	{
-		SendPkt(MakeCTS(FamaH.GetSA()));
+		SendPkt(MakeCTS(sfh.GetSA()));
   		SFStatus = WAIT_DATA;
 	}
 
@@ -427,7 +427,7 @@ AquaSimSF::MakeCTS(AquaSimAddress RTS_Sender)
   	Ptr<Packet> pkt = Create<Packet>();
   	AquaSimHeader asHeader;
 	MacHeader mach;
-	FamaHeader FamaH;
+	SFHeader sfh;
 	AquaSimPtTag ptag;
 
   	asHeader.SetSize(GetSizeByTxTime(m_CTSTxTime.ToDouble(Time::S)));
@@ -437,11 +437,11 @@ AquaSimSF::MakeCTS(AquaSimAddress RTS_Sender)
 	ptag.SetPacketType(AquaSimPtTag::PT_FAMA);
   	asHeader.SetNextHop(RTS_Sender);
 
-  	FamaH.SetPType(FamaHeader::CTS);
-  	FamaH.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
-  	FamaH.SetDA(RTS_Sender);
+  	sfh.SetPType(SFHeader::CTS);
+  	sfh.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+  	sfh.SetDA(RTS_Sender);
 
-	pkt->AddHeader(FamaH);
+	pkt->AddHeader(sfh);
 	pkt->AddHeader(mach);
   	pkt->AddHeader(asHeader);
 	pkt->AddPacketTag(ptag);
@@ -450,12 +450,12 @@ AquaSimSF::MakeCTS(AquaSimAddress RTS_Sender)
 }
 
 void
-AquaSimSF::ProcessCTS(FamaHeader FamaH)
+AquaSimSF::ProcessCTS(SFHeader sfh)
 {
 	if(m_waitCTSTimer.IsRunning()) {
         	m_waitCTSTimer.Cancel();
             
-              	if(FamaH.GetDA() == m_device->GetAddress()) {
+              	if(sfh.GetDA() == m_device->GetAddress()) {
                   	SendDataPkt();
               	}
               	else {
@@ -468,9 +468,9 @@ AquaSimSF::ProcessCTS(FamaHeader FamaH)
 }
 
 bool
-AquaSimSF::ProcessDATA(FamaHeader FamaH, Ptr<Packet> pkt)
+AquaSimSF::ProcessDATA(SFHeader sfh, Ptr<Packet> pkt)
 {	
-	if( FamaH.GetDA() == m_device->GetAddress() ) {
+	if( sfh.GetDA() == m_device->GetAddress() ) {
 		//ptag.SetPacketType(UpperLayerPktType);
                 NS_LOG_INFO("Process Data Packet!!!!");
 	    	SFStatus = WAIT_DATA_FINISH;
