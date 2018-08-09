@@ -37,7 +37,7 @@ NS_LOG_COMPONENT_DEFINE("AquaSimSlotSF");
 NS_OBJECT_ENSURE_REGISTERED(AquaSimSlotSF);
 
 
-AquaSimSlotSF::AquaSimSlotSF(): SlotSFStatus(PASSIVE), m_NDPeriod(4.0), m_maxBurst(1),
+AquaSimSlotSF::AquaSimSlotSF(): SlotSFStatus(PASSIVE), m_NDPeriod(4.0), m_maxBurst(3),
 		m_dataPktInterval(Seconds(0.0001)), m_estimateError(Seconds(0.0001)),m_dataPktSize(1600),
 		m_neighborId(0), m_waitCTSTimer(Timer::CHECK_ON_DESTROY),//(Timer::CANCEL_ON_DESTROY),
 		m_backoffTimer(Timer::CANCEL_ON_DESTROY), m_remoteTimer(Timer::CANCEL_ON_DESTROY),
@@ -49,9 +49,10 @@ AquaSimSlotSF::AquaSimSlotSF(): SlotSFStatus(PASSIVE), m_NDPeriod(4.0), m_maxBur
   	m_maxPropDelay = Seconds(m_transmitDistance/1500.0);
   	m_RTSTxTime = m_maxPropDelay;
   	m_CTSTxTime = m_RTSTxTime + 2*m_maxPropDelay;
-
+	m_dataRate = 10000.0;
+	m_RTSCPTime = 2*m_maxPropDelay + Seconds(0.0030);
   	m_maxDataTxTime = MilliSeconds(m_dataPktSize/m_bitRate);  //1600bits/10kbps
-
+	m_rctSlotTime = 0.0; 
 	InitSlotLen();
 
   	m_rand = CreateObject<UniformRandomVariable> ();
@@ -86,21 +87,19 @@ AquaSimSlotSF::AssignStreams (int64_t stream)
 void
 AquaSimSlotSF::NDTimerExpire()
 {
-  	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
-	//Ptr<Packet> p = MakeND();
-	//SendPkt(MakeND());
 	Ptr<Packet> pkt = MakeND();
 	AquaSimHeader ash;
 	pkt->PeekHeader(ash);
-	NS_LOG_FUNCTION("ash.GetTimeStamp" << ash.GetTimeStamp());
-	NS_LOG_FUNCTION("Now" << Simulator::Now());
-	Simulator::Schedule(ash.GetTimeStamp(), &AquaSimSlotSF::SendPkt, this, pkt);
+	Simulator::Schedule(ash.GetTimeStamp() - Simulator::Now(), &AquaSimSlotSF::SendPkt, this, pkt);
 	//Simulator::Schedule(Seconds(0), &AquaSimSlotSF::SendPkt, this, pkt);
   	m_slotsfNDCounter--;
 
   	if (m_slotsfNDCounter > 0) {
     		Simulator::Schedule(Seconds(m_rand->GetValue(0.0,m_NDPeriod)), &AquaSimSlotSF::NDTimerExpire, this);
+	
 	}
+
+  	NS_LOG_FUNCTION("Call" << AquaSimAddress::ConvertFrom(m_device->GetAddress()) << "ash.GetTimeStamp" << ash.GetTimeStamp() << "Now" << Simulator::Now());
 }
 
 // slot based
@@ -110,19 +109,37 @@ AquaSimSlotSF::InitSlotLen()
 {
 	//NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
 	
-	SFamaHeader SFama;
-	m_slotLen = m_guardTime + m_maxPropDelay.ToDouble(Time::S) + SFama.GetSize(SFamaHeader::SFAMA_CTS) / 10240.0; // 10240 is datarate(bps)
+	SlotSFHeader ssfh;
+	m_slotLen = m_guardTime + m_maxPropDelay.ToDouble(Time::S) + 50 / m_dataRate; // 10000 is datarate(bps)
 	NS_LOG_FUNCTION("m_slotLen" << m_slotLen << "m_guardTime" << m_guardTime <<"m_maxPropDelay" << m_maxPropDelay.ToDouble(Time::S) 
-				<< "SFama.GetSize(FamaHeader::RTS)" << SFama.GetSize(SFamaHeader::SFAMA_CTS)/10240.0);
+				<< "ssfh.GetSize()" << 50/10240.0);
 }
 
 double
 AquaSimSlotSF::GetTime2ComingSlot(double t)
 {
 	double numElapseSlot = t/m_slotLen;
-	double result = (ceil(numElapseSlot) * m_slotLen) - t;
-	NS_LOG_FUNCTION("numElapseSlot" << numElapseSlot << "t" << t << "m_slotLen" << m_slotLen << "result" << result << "Seconds(result)" << Seconds(result));
-		
+	//double result = (ceil(numElapseSlot) * m_slotLen) - t;
+	double result = (ceil(numElapseSlot) * m_slotLen);
+/*	
+	if(m_rtcSlotTime == Seconds(0.0)) {
+		m_rtcSlotTime = result;
+		//return result;	
+	}
+*/	
+	
+	while(result < m_rctSlotTime + m_slotLen/5)
+	{
+		result += m_slotLen;
+	}
+
+/*	
+	if((m_rctSlotTime - m_slotLen/3) <= result && result <= (m_rctSlotTime + m_slotLen/3)) {
+		result += m_slotLen;
+	}
+*/
+	m_rctSlotTime = result;
+	NS_LOG_FUNCTION("Call" << AquaSimAddress::ConvertFrom(m_device->GetAddress())  << "numElapseSlot" << numElapseSlot << "t" << t << "m_slotLen" << m_slotLen << "result" << result << "Seconds(result)" << Seconds(result));
 	return result;
 }
 
@@ -131,7 +148,7 @@ AquaSimSlotSF::GetTime2ComingSlot(double t)
 void
 AquaSimSlotSF::SendPkt(Ptr<Packet> pkt)
 {
-  	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()) << "Now" << Simulator::Now());
+  	NS_LOG_FUNCTION("Call" << AquaSimAddress::ConvertFrom(m_device->GetAddress()) << "Now" << Simulator::Now());
   	AquaSimHeader asHeader;
   	pkt->RemoveHeader(asHeader);
 
@@ -146,7 +163,7 @@ AquaSimSlotSF::SendPkt(Ptr<Packet> pkt)
     		case NIDLE:
       			//for slot based
       			//startTime = Simulator::Now() + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S)));
-			//asHeader.SetTimeStamp(startTime);
+			//asHeader.etTimeStamp(startTime);
       			pkt->AddHeader(asHeader);
 			//NS_LOG_FUNCTION("Now" << Simulator::Now() << "TimeStamp" << asHeader.GetTimeStamp() << "startTime" << startTime);
       			//Simulator::Schedule(startTime, &AquaSimMac::SendDown, this, pkt);
@@ -160,36 +177,6 @@ AquaSimSlotSF::SendPkt(Ptr<Packet> pkt)
       			//status is SEND
      		 	pkt=0;
   }
-
-/*
-	if(m_device->GetTransmissionStatus()){
-		PowerOn();
-	}
-
-	switch(SFStatus) {
-		case PASSIVE:
-			NS_LOG_WARN("SFStatus is PASSIVE !!!");
-			break;
-		case BACKOFF:
-			NS_LOG_WARN("SFStatus is BACKOFF !!!");
-			break;
-		case WAIT_CTS:
-			m_device->SetTransmissionStatus(SEND);
-			pkt->AddHeader(asHeader);
-			SendDown(pkt);
-			break;
-		case WAIT_DATA_FINISH:
-			NS_LOG_WARN("SFStaus is WAIT_DATA_FINISH !!!");
-			break;
-		case WAIT_DATA:
-			NS_LOG_WARN("Collision!!!!!");
-			break;
-		case REMOTE:
-			break;
-
-	}
-*/
-
   	return;
 }
 
@@ -199,6 +186,7 @@ AquaSimSlotSF::TxProcess(Ptr<Packet> pkt)
   	//callback to higher level, should be implemented differently
   	//Scheduler::instance().schedule(&CallBack_Handler, &m_callbackEvent, CALLBACK_DELAY);
 
+  	//NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
   	if( NeighborList.empty() ) {
       		pkt=0;
       		return false;
@@ -207,12 +195,12 @@ AquaSimSlotSF::TxProcess(Ptr<Packet> pkt)
   	//figure out how to cache the packet will be sent out!!!!!!!
   	AquaSimHeader asHeader;
 	VBHeader vbh;
-  	FamaHeader FamaH;
+  	SlotSFHeader ssfh;
 	MacHeader mach;
 	AquaSimPtTag ptag;
  	pkt->RemoveHeader(asHeader);
 	pkt->RemoveHeader(mach);
-  	pkt->RemoveHeader(FamaH);
+  	pkt->RemoveHeader(ssfh);
 	pkt->RemovePacketTag(ptag);
 
 	asHeader.SetSize(m_dataPktSize);
@@ -223,15 +211,24 @@ AquaSimSlotSF::TxProcess(Ptr<Packet> pkt)
 
   	asHeader.SetNextHop(NeighborList[m_neighborId]);
   	m_neighborId = (m_neighborId+1)%NeighborList.size();
+	//m_neighborId = m_rand->GetValue(0, NeighborList.size());
+/*
+	while(AquaSimAddress::ConvertFrom(NeighborList[m_neighborId]) != 10)
+	{
+		m_neighborId = (m_neighborId+1) % NeighborList.size();	
+	}
+	//m_neighborId = 30;
+*/
+  	NS_LOG_FUNCTION("Call" << AquaSimAddress::ConvertFrom(m_device->GetAddress()) << "m_neighborId" << m_neighborId);
 	ptag.SetPacketType(AquaSimPtTag::PT_FAMA);
 
   	vbh.SetTargetAddr(asHeader.GetNextHop());
 
-  	FamaH.SetPType(FamaHeader::FAMA_DATA);
-  	FamaH.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
-  	FamaH.SetDA(asHeader.GetNextHop());
+  	ssfh.SetPType(SlotSFHeader::DATA);
+  	ssfh.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+  	ssfh.SetDA(asHeader.GetNextHop());
 
-	pkt->AddHeader(FamaH);
+	pkt->AddHeader(ssfh);
 	pkt->AddHeader(mach);
   	pkt->AddHeader(asHeader);
 	pkt->AddPacketTag(ptag);
@@ -241,7 +238,7 @@ AquaSimSlotSF::TxProcess(Ptr<Packet> pkt)
   	if( (PktQ.size() == 1) /*the pkt is the first one*/ && SlotSFStatus == PASSIVE ) {
       		if( CarrierDected() ) {
 	 		//DoRemote(2*m_maxPropDelay+m_estimateError);
-	 		DoRemote(2*Seconds(m_slotLen));
+	 		DoRemote(2*Seconds(m_slotLen));;
       		}
       		else{
 	 	//	SendRTS(2*m_maxPropDelay+m_CTSTxTime+m_RTSTxTime+m_estimateError);
@@ -255,21 +252,31 @@ AquaSimSlotSF::TxProcess(Ptr<Packet> pkt)
 bool
 AquaSimSlotSF::RecvProcess(Ptr<Packet> pkt)
 {
-	NS_LOG_FUNCTION("Call: " << AquaSimAddress::ConvertFrom(m_device->GetAddress()) << "m_waitCTSTimer : " << m_waitCTSTimer.GetDelayLeft());
-
-
   	AquaSimHeader asHeader;
 	MacHeader mach;
-  	FamaHeader FamaH;
+  	SlotSFHeader ssfh;
 	AquaSimPtTag ptag;
   	pkt->RemoveHeader(asHeader);
 	pkt->RemoveHeader(mach);
-  	pkt->PeekHeader(FamaH);
+  	pkt->PeekHeader(ssfh);
+	//ssfh.SetRecvProcessTime(Simulator::Now());
 	pkt->PeekPacketTag(ptag);
 	pkt->AddHeader(mach);
 	pkt->AddHeader(asHeader);
-  	AquaSimAddress dst = FamaH.GetDA();
-  
+  	AquaSimAddress dst = ssfh.GetDA();
+ 
+	NS_LOG_FUNCTION("Call" << AquaSimAddress::ConvertFrom(m_device->GetAddress()) << "SlotSFHeader" << ssfh << "asHeader" << asHeader << "Time Stamp" << asHeader.GetTimeStamp() 
+			<< "Now" << Simulator::Now());
+	 
+	// collision
+	if(isReceived == true) {
+		NS_LOG_FUNCTION("Call" << AquaSimAddress::ConvertFrom(m_device->GetAddress()) << "collision!!!!!!!!!!!!!" << "Now" << Simulator::Now());
+		AfterRecvProcess(ssfh);
+		return false;
+	}
+
+	isReceived = true; // recv mode
+
   	if( m_backoffTimer.IsRunning() ) {
       		m_backoffTimer.Cancel();
       		//DoRemote(2*m_maxPropDelay+m_estimateError);
@@ -279,67 +286,47 @@ AquaSimSlotSF::RecvProcess(Ptr<Packet> pkt)
       		m_remoteTimer.Cancel();
       		m_remoteExpireTime = Seconds(-1);
   	}
-
- 	 /*ND is not a part of AquaSimFama. We just want to use it to get next hop
-  	 *So we do not care wether it collides with others
-  	 */
-  	if( ( ptag.GetPacketType() == AquaSimPtTag::PT_FAMA)&& (FamaH.GetPType()==FamaHeader::ND) ) {
-      		ProcessND(FamaH.GetSA());
+/*
+  	if( ( ptag.GetPacketType() == AquaSimPtTag::PT_FAMA)&& (ssfh.GetPType()==SlotSFHeader::ND) ) {
+      		ProcessND(ssfh.GetSA());
       		pkt=0;
       		return false;
   	}
-
+*/
   	if( asHeader.GetErrorFlag() )
   	{
-      		//if(drop_)
-		//drop_->recv(pkt,"Error/Collision");
-    		//else
 		pkt=0;
 
-      		//DoRemote(2*m_maxPropDelay+m_estimateError);
 		DoRemote(2*Seconds(m_slotLen));
       		return false;
   	}
 
   	if( ptag.GetPacketType() == AquaSimPtTag::PT_FAMA ) {
-      		switch( FamaH.GetPType() ) {
-			case FamaHeader::RTS:
-          			if( dst == m_device->GetAddress() ) {
-	      				ProcessRTS(FamaH.GetSA());
-	  			}
-	  			DoRemote(m_CTSTxTime+2*m_maxPropDelay+m_estimateError);
-	  			break;
+		AfterRecvProcess(ssfh);		
 
-			case FamaHeader::CTS:
-          			if(m_waitCTSTimer.IsRunning()) {
-              				m_waitCTSTimer.Cancel();
-            
-              				if(dst == m_device->GetAddress()) {
-                  				SendDataPkt();
-              				}
-              				else {
-                  				DoBackoff();
-              				} 
-          			}		 
-
-          			// this CTS must not be for this node
-            			//DoRemote(2*m_maxPropDelay+m_estimateError);
-				DoRemote(2*Seconds(m_slotLen));
-          			break;
+      		switch( ssfh.GetPType() ) {
+			case SlotSFHeader::ND:
+				ProcessND(pkt);
+				pkt = 0;
+				return false;
+				//break;
+			case SlotSFHeader::RELAY_CTS:
+				ProcessRELAY_CTS(ssfh);
+				break;
+			case SlotSFHeader::ND_ACK:
+				//ProcessND_ACK(pkt);
+				break;
+			case SlotSFHeader::RTS:
+				ProcessRTS(pkt);
+				break;
+			case SlotSFHeader::CTS:
+				ProcessCTS(ssfh);
+				break;
 			default:
-          			//process Data packet
-	  			if( dst == m_device->GetAddress() ) {
-	        			//ptag.SetPacketType(UpperLayerPktType);
-                			//NS_LOG_INFO("Process Data Packet!!!!");
-					SlotSFStatus = WAIT_DATA_FINISH;
-      					m_device->SetTransmissionStatus(RECV);
-	    				SendUp(pkt);
-	    				return true;
-	  			}
-	  			else {
-					//DoRemote(m_maxPropDelay+m_estimateError);
-					DoRemote(Seconds(m_slotLen));
-	  			}
+				//process Data packet
+				if(ProcessDATA(pkt))
+					return true;
+
       		}
   	}
 
@@ -407,16 +394,14 @@ AquaSimSlotSF::SendDataPkt()
 void
 AquaSimSlotSF::ProcessDataSendTimer(Ptr<Packet> pkt)
 {
-  	NS_LOG_FUNCTION(this << pkt);
-
-	
   	AquaSimHeader asHeader;
 	pkt->PeekHeader(asHeader);
-	Time startTime = Simulator::Now() + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S)));
+	Time startTime = Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S)));
 	asHeader.SetTimeStamp(startTime);
 	pkt->AddHeader(asHeader);
-	NS_LOG_FUNCTION("Now" << Simulator::Now() << "TimeStamp:" << asHeader.GetTimeStamp() << "startTime" << startTime);		
-	Simulator::Schedule(startTime, &AquaSimSlotSF::SendPkt, this, pkt);
+	NS_LOG_FUNCTION("Call:" << AquaSimAddress::ConvertFrom(m_device->GetAddress()) << "Now" << Simulator::Now() << "TimeStamp:" << asHeader.GetTimeStamp() << "startTime" << startTime);		
+
+	Simulator::Schedule(startTime - Simulator::Now(), &AquaSimSlotSF::SendPkt, this, pkt);
 			
   	//SendPkt(pkt);
 }
@@ -425,6 +410,7 @@ AquaSimSlotSF::ProcessDataSendTimer(Ptr<Packet> pkt)
 void
 AquaSimSlotSF::ProcessDataBackoffTimer()
 {
+  	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
   	if( !PktQ.empty() )
     		DoBackoff();
   	else
@@ -435,12 +421,10 @@ AquaSimSlotSF::ProcessDataBackoffTimer()
 Ptr<Packet>
 AquaSimSlotSF::MakeND()
 {
-  	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
-
   	Ptr<Packet> pkt = Create<Packet>();
   	AquaSimHeader asHeader;
 	MacHeader mach;
-  	FamaHeader FamaH;
+  	SlotSFHeader ssfh;
 	AquaSimPtTag ptag;
 
 	asHeader.SetSize(2*sizeof(AquaSimAddress)+1);
@@ -449,15 +433,19 @@ AquaSimSlotSF::MakeND()
   	asHeader.SetDirection(AquaSimHeader::DOWN);
 	ptag.SetPacketType(AquaSimPtTag::PT_FAMA);
   	asHeader.SetNextHop(AquaSimAddress::GetBroadcast());
-	Time startTime = Simulator::Now() + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S)));
+	Time startTime = Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S)));
 	asHeader.SetTimeStamp(startTime);
-	NS_LOG_FUNCTION("Now" << Simulator::Now() << "TimeStamp: " << asHeader.GetTimeStamp() << "startTime" << startTime);
+	NS_LOG_FUNCTION("Call" << AquaSimAddress::ConvertFrom(m_device->GetAddress()) << "Now" << Simulator::Now() << "TimeStamp: " << asHeader.GetTimeStamp() << "startTime" << startTime);
 
-  	FamaH.SetPType(FamaHeader::ND);
-  	FamaH.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
-  	FamaH.SetDA(AquaSimAddress::GetBroadcast());
+  	ssfh.SetPType(SlotSFHeader::ND);
+  	ssfh.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+  	ssfh.SetDA(AquaSimAddress::GetBroadcast());
+	//ssfh.SetSendTime(Seconds(0));
+	//ssfh.SetReceiveTime(Seconds(0));
+	//ssfh.SetReplyTime(Seconds(0));
+	//ssfh.SetRecvProcessTime(Seconds(0));
 
-	pkt->AddHeader(FamaH);
+	pkt->AddHeader(ssfh);
 	pkt->AddHeader(mach);
   	pkt->AddHeader(asHeader);
 	pkt->AddPacketTag(ptag);
@@ -467,22 +455,104 @@ AquaSimSlotSF::MakeND()
 
 
 void
-AquaSimSlotSF::ProcessND(AquaSimAddress sa)
+AquaSimSlotSF::ProcessND(Ptr<Packet> pkt)
 {
-  	//FamaHeader FamaH;
-  	//pkt->PeekHeader(FamaH);
-	NeighborList.push_back(sa);
+	/*
+	AquaSimHeader asHeader;
+	//MacHeader mach;
+	//SlotSFHeader ssfh;
+	Ptr<Packet> nd_ack = MakeND_ACK(pkt);	
+
+	nd_ack->PeekHeader(asHeader);
+	Simulator::Schedule(asHeader.GetTimeStamp() - Simulator::Now(), &AquaSimSlotSF::SendPkt, this, pkt);	
+	SlotSFStatus = WAIT_ND_ACK;
+	NS_LOG_FUNCTION("Call" << AquaSimAddress::ConvertFrom(m_device->GetAddress()) << "delay" << asHeader.GetTimeStamp() - Simulator::Now());
+	*/
+	// timer set(re-send)
+	//
+	AquaSimHeader asHeader;
+	MacHeader mach;
+	SlotSFHeader ssfh;
+	pkt->RemoveHeader(asHeader);
+	pkt->RemoveHeader(mach);
+	pkt->PeekHeader(ssfh);
+	NeighborList.push_back(ssfh.GetSA());	
 }
 
+Ptr<Packet>
+AquaSimSlotSF::MakeND_ACK(Ptr<Packet> pkt)
+{
+	Ptr<Packet> nd_ack = Create<Packet>();
+
+  	AquaSimHeader ack_asHeader;
+	MacHeader ack_mach;
+  	SlotSFHeader ack_ssfh;
+	AquaSimPtTag ack_ptag;
+
+	AquaSimHeader asHeader;
+	MacHeader mach;
+	SlotSFHeader ssfh;
+	pkt->RemoveHeader(asHeader);  	
+	pkt->RemoveHeader(mach);
+	pkt->PeekHeader(ssfh);
+	//pkt->AddHeader(mach);
+	//pkt->AddHeader(asHeader);
+
+  	ack_asHeader.SetSize(GetSizeByTxTime(m_RTSTxTime.ToDouble(Time::S)));
+  	ack_asHeader.SetTxTime(m_RTSTxTime);
+  	ack_asHeader.SetErrorFlag(false);
+  	ack_asHeader.SetDirection(AquaSimHeader::DOWN);
+	ack_ptag.SetPacketType(AquaSimPtTag::PT_FAMA);
+  	ack_asHeader.SetNextHop(ssfh.GetSA());
+	Time startTime = Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S)));
+	ack_asHeader.SetTimeStamp(startTime);
+	NS_LOG_FUNCTION("Call" << AquaSimAddress::ConvertFrom(m_device->GetAddress()) << "Now" << Simulator::Now() << "TimeStamp: " << ack_asHeader.GetTimeStamp() << "startTime" << startTime);
+
+  	ack_ssfh.SetPType(SlotSFHeader::ND_ACK);
+ 	ack_ssfh.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+  	ack_ssfh.SetDA(ssfh.GetSA());
+	//ack_ssfh.SetSendTime(ssfh.GetSendTime());
+	//ack_ssfh.SetReceiveTime(ssfh.GetRecvProcessTime());
+	//ack_ssfh.SetReplyTime(startTime);
+	//ack_ssfh.SetRecvProcessTime(Seconds(0));
+	
+	nd_ack->AddHeader(ack_ssfh);
+	nd_ack->AddHeader(ack_mach);
+  	nd_ack->AddHeader(ack_asHeader);
+	nd_ack->AddPacketTag(ack_ptag);
+  	
+	return nd_ack;
+}
+
+void
+AquaSimSlotSF::ProcessND_ACK(Ptr<Packet> pkt)
+{
+	AquaSimHeader asHeader;
+	//MacHeader mach;
+	SlotSFHeader ssfh;
+	//pkt->RemoveHeader(asHeader);  	
+	//pkt->RemoveHeader(mach);
+	pkt->PeekHeader(ssfh);
+
+	//Time propDelay = ((ssfh.GetRecvProcessTime() - ssfh.GetSendTime()) - (ssfh.GetReplyTime() - ssfh.GetReceiveTime())) / 2;
+	//int quotient = ssfh.GetRecvProcessTime().ToDouble(Time::S) / m_slotLen;
+	//double remainder = ssfh.GetRecvProcessTime().ToDouble(Time::S) - ((double)quotient * m_slotLen);
+	//Time delay = propDelay - Seconds(remainder); 
+	//NS_LOG_FUNCTION("RecvProcessTime" << ssfh.GetRecvProcessTime() << "ssfh.GetSendTime" << ssfh.GetSendTime() << "GetReplyTime" << ssfh.GetReplyTime() << "GetReceiveTime" << ssfh.GetReceiveTime()
+	//		<< "propDelay" << propDelay << "delay" << delay);
+	
+	NeighborList.push_back(ssfh.GetSA());
+	//DelayList.push_back(delay);
+	//NeighborList.push_back(ssfh.GetSA());
+}
 
 Ptr<Packet>
 AquaSimSlotSF::MakeRTS(AquaSimAddress Recver)
 {
-  	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
   	Ptr<Packet> pkt = Create<Packet>();
   	AquaSimHeader asHeader;
 	MacHeader mach;
-  	FamaHeader FamaH;
+  	SlotSFHeader ssfh;
 	AquaSimPtTag ptag;
 
   	asHeader.SetSize(GetSizeByTxTime(m_RTSTxTime.ToDouble(Time::S)));
@@ -491,15 +561,19 @@ AquaSimSlotSF::MakeRTS(AquaSimAddress Recver)
   	asHeader.SetDirection(AquaSimHeader::DOWN);
 	ptag.SetPacketType(AquaSimPtTag::PT_FAMA);
   	asHeader.SetNextHop(Recver);
-	Time startTime = Simulator::Now() + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S)));
+	Time startTime = Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S)));
 	asHeader.SetTimeStamp(startTime);
-	NS_LOG_FUNCTION("Now" << Simulator::Now() << "TimeStamp: " << asHeader.GetTimeStamp() << "startTime" << startTime);
+	NS_LOG_FUNCTION("Call" << AquaSimAddress::ConvertFrom(m_device->GetAddress()) << "Now" << Simulator::Now() << "TimeStamp: " << asHeader.GetTimeStamp() << "startTime" << startTime);
 
-  	FamaH.SetPType(FamaHeader::RTS);
- 	FamaH.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
-  	FamaH.SetDA(Recver);
+  	ssfh.SetPType(SlotSFHeader::RTS);
+ 	ssfh.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+  	ssfh.SetDA(Recver);
+	//ssfh.SetSendTime(Seconds(0));
+	//ssfh.SetReceiveTime(Seconds(0));
+	//ssfh.SetReplyTime(Seconds(0));
+	//ssfh.SetRecvProcessTime(Seconds(0));
 
-	pkt->AddHeader(FamaH);
+	pkt->AddHeader(ssfh);
 	pkt->AddHeader(mach);
   	pkt->AddHeader(asHeader);
 	pkt->AddPacketTag(ptag);
@@ -512,28 +586,137 @@ void
 AquaSimSlotSF::SendRTS(Time DeltaTime)
 {
   	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
-  	AquaSimHeader asHeader;
-  	PktQ.front()->PeekHeader(asHeader);
-  	SendPkt( MakeRTS(asHeader.GetNextHop()) );
-  	NS_LOG_FUNCTION("After SendPkt");
-  	SlotSFStatus = WAIT_CTS;
-  	NS_LOG_FUNCTION("m_waitCTSTimer : " << m_waitCTSTimer.GetDelayLeft());
-  	NS_LOG_FUNCTION("DeltaTIme : " << DeltaTime);
-  	m_waitCTSTimer.SetFunction(&AquaSimSlotSF::DoBackoff,this);
-  	m_waitCTSTimer.Schedule(DeltaTime);
+  	if(!m_waitCTSTimer.IsRunning()) {
+		AquaSimHeader asHeader;
+	  	PktQ.front()->PeekHeader(asHeader);
+		
+		Ptr<Packet> pkt = MakeRTS(asHeader.GetNextHop());
+		pkt->PeekHeader(asHeader);
+		Simulator::Schedule(asHeader.GetTimeStamp() - Simulator::Now(), &AquaSimSlotSF::SendPkt, this, pkt);	
+		
+	  	NS_LOG_FUNCTION("Call" << AquaSimAddress::ConvertFrom(m_device->GetAddress()) << "delay" << asHeader.GetTimeStamp() - Simulator::Now());
+	  	
+		SlotSFStatus = WAIT_CTS;
+		m_waitCTSTimer.SetFunction(&AquaSimSlotSF::DoBackoff,this);
+  		m_waitCTSTimer.Schedule(DeltaTime);
+
+	}
+//Time startTime = Simulator::Now() + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S)));
 }
 
 
 void
-AquaSimSlotSF::ProcessRTS(AquaSimAddress sa)
+AquaSimSlotSF::ProcessRTS(Ptr<Packet> pkt)
 {
-  	//FamaHeader FamaH;
-  	//pkt->PeekHeader(FamaH);
-  	SendPkt( MakeCTS(sa) );
-  	SlotSFStatus = WAIT_DATA;
+  	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+	AquaSimHeader asHeader;
+	MacHeader mach;
+	SlotSFHeader ssfh;
+	pkt->RemoveHeader(asHeader);  	
+	pkt->RemoveHeader(mach);
+	pkt->PeekHeader(ssfh);
+	pkt->AddHeader(mach);
+	pkt->AddHeader(asHeader);
+
+	if( ssfh.GetDA() == m_device->GetAddress() )
+	{
+		if( m_rtsQ.size() == 0 )
+		{
+			Ptr<Packet> pkt = MakeRELAY_CTS();
+			pkt->PeekHeader(asHeader);
+			Simulator::Schedule(asHeader.GetTimeStamp() - Simulator::Now(), &AquaSimSlotSF::SendPkt, this, pkt);	
+
+			//SendPkt(MakeRELAY_CTS(ssfh.GetSA()));
+			SlotSFStatus = WAIT_DATA;
+			Simulator::Schedule(m_RTSCPTime, &AquaSimSlotSF::SendCTS, this);
+		}	
+		
+		m_rtsQ.push(pkt);
+	}  	
+
+	DoRemote(5*m_maxPropDelay+m_estimateError+m_RTSCPTime);
 }
 
+void
+AquaSimSlotSF::SendCTS()
+{
+  	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+	Time minTime = Seconds(999999);
+	Time curTime = Seconds(0);
+	Ptr<Packet> pkt;
+	Ptr<Packet> earlyPkt;
+	int rtsQSize = m_rtsQ.size();
+	
+	AquaSimHeader asHeader;
+	MacHeader mach;
+	SlotSFHeader ssfh;
+	
+	for(int i = 0; i < rtsQSize; i++)
+	{
+		pkt = m_rtsQ.front();
+		pkt->RemoveHeader(asHeader);
+		curTime = asHeader.GetTimeStamp();
+		
+		//test
+		pkt->RemoveHeader(mach);
+		pkt->RemoveHeader(ssfh);
+		NS_LOG_FUNCTION("ssfh" << ssfh << "curTimr" << curTime << "asHeader" << asHeader);
+		pkt->AddHeader(ssfh);
+		pkt->AddHeader(mach);
+		if(curTime < minTime){
+			minTime = curTime;
+			earlyPkt = pkt;
+		}
+		m_rtsQ.pop();
+	} 
+	earlyPkt->RemoveHeader(mach);
+	earlyPkt->RemoveHeader(ssfh);
+	
+	//SendPkt(MakeCTS(ssfh.GetSA()));
 
+	Ptr<Packet> CTS_pkt = MakeCTS(ssfh.GetSA());
+	CTS_pkt->PeekHeader(asHeader);
+	Simulator::Schedule(asHeader.GetTimeStamp() - Simulator::Now(), &AquaSimSlotSF::SendPkt, this, CTS_pkt);	
+}
+
+Ptr<Packet>
+AquaSimSlotSF::MakeRELAY_CTS()
+{
+	NS_LOG_FUNCTION("Call" << AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+
+	Ptr<Packet> pkt = Create<Packet>();
+	AquaSimHeader asHeader;
+	MacHeader mach;
+	SlotSFHeader ssfh;
+	AquaSimPtTag ptag;
+
+	asHeader.SetSize(GetSizeByTxTime(m_CTSTxTime.ToDouble(Time::S)));
+	asHeader.SetTxTime(m_CTSTxTime);
+	asHeader.SetErrorFlag(false);
+	asHeader.SetDirection(AquaSimHeader::DOWN);
+	ptag.SetPacketType(AquaSimPtTag::PT_FAMA);
+	asHeader.SetNextHop(AquaSimAddress::GetBroadcast());
+
+	Time startTime = Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S)));
+	asHeader.SetTimeStamp(startTime);
+	NS_LOG_FUNCTION("Now" << Simulator::Now() << "TimeStamp: " << asHeader.GetTimeStamp() << "startTime" << startTime);
+
+	ssfh.SetPType(SlotSFHeader::RELAY_CTS);
+	ssfh.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+	ssfh.SetDA(AquaSimAddress::GetBroadcast());
+       	//ssfh.SetSendTime(Seconds(0));
+       	//ssfh.SetReceiveTime(Seconds(0));
+       	//ssfh.SetReplyTime(Seconds(0));
+       	//ssfh.SetRecvProcessTime(Seconds(0));
+
+
+	pkt->AddHeader(ssfh);
+	pkt->AddHeader(mach);
+	pkt->AddHeader(asHeader);
+	pkt->AddPacketTag(ptag);
+
+	return pkt;
+}
 
 Ptr<Packet>
 AquaSimSlotSF::MakeCTS(AquaSimAddress RTS_Sender)
@@ -543,7 +726,7 @@ AquaSimSlotSF::MakeCTS(AquaSimAddress RTS_Sender)
   	Ptr<Packet> pkt = Create<Packet>();
   	AquaSimHeader asHeader;
 	MacHeader mach;
-	FamaHeader FamaH;
+	SlotSFHeader ssfh;
 	AquaSimPtTag ptag;
 
   	asHeader.SetSize(GetSizeByTxTime(m_CTSTxTime.ToDouble(Time::S)));
@@ -553,15 +736,19 @@ AquaSimSlotSF::MakeCTS(AquaSimAddress RTS_Sender)
 	ptag.SetPacketType(AquaSimPtTag::PT_FAMA);
   	asHeader.SetNextHop(RTS_Sender);
 	
-	Time startTime = Simulator::Now() + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S)));
+	Time startTime = Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S)));
 	asHeader.SetTimeStamp(startTime);
 	NS_LOG_FUNCTION("Now" << Simulator::Now() << "TimeStamp: " << asHeader.GetTimeStamp() << "startTime" << startTime);
 
-  	FamaH.SetPType(FamaHeader::CTS);
-  	FamaH.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
-  	FamaH.SetDA(RTS_Sender);
+  	ssfh.SetPType(SlotSFHeader::CTS);
+  	ssfh.SetSA(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+  	ssfh.SetDA(RTS_Sender);
+	//ssfh.SetSendTime(Seconds(0));
+       	//ssfh.SetReceiveTime(Seconds(0));
+       	//ssfh.SetReplyTime(Seconds(0));
+       	//ssfh.SetRecvProcessTime(Seconds(0));
 
-	pkt->AddHeader(FamaH);
+	pkt->AddHeader(ssfh);
 	pkt->AddHeader(mach);
   	pkt->AddHeader(asHeader);
 	pkt->AddPacketTag(ptag);
@@ -569,6 +756,56 @@ AquaSimSlotSF::MakeCTS(AquaSimAddress RTS_Sender)
 	return pkt;
 }
 
+void
+AquaSimSlotSF::ProcessRELAY_CTS(SlotSFHeader ssfh)
+{
+  	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+	if(ssfh.GetDA() != m_device->GetAddress()) {
+		DoRemote(m_maxPropDelay + m_estimateError + m_RTSCPTime);
+	}
+}
+
+void
+AquaSimSlotSF::ProcessCTS(SlotSFHeader ssfh)
+{
+  	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+	if(m_waitCTSTimer.IsRunning()) {
+		m_waitCTSTimer.Cancel();
+
+		if(ssfh.GetDA() == m_device->GetAddress()) {
+			SendDataPkt();
+		}
+		else {
+			DoBackoff();
+		}
+	}
+
+	DoRemote(2*Seconds(m_slotLen));
+}
+
+bool
+AquaSimSlotSF::ProcessDATA(Ptr<Packet> pkt)
+{
+  	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+	AquaSimHeader asHeader;
+	MacHeader mach;
+	SlotSFHeader ssfh;
+	pkt->RemoveHeader(asHeader);
+	pkt->RemoveHeader(mach);
+	pkt->PeekHeader(ssfh);
+	pkt->AddHeader(mach);
+	pkt->AddHeader(asHeader);
+
+	if( ssfh.GetDA() == m_device->GetAddress() ) {
+		SlotSFStatus = WAIT_DATA_FINISH;
+		SendUp(pkt);
+		return true;
+	}
+	else {
+		DoRemote(Seconds(m_slotLen));
+		return false;
+	}
+}
 
 bool
 AquaSimSlotSF::CarrierDected()
@@ -583,6 +820,7 @@ AquaSimSlotSF::CarrierDected()
 void
 AquaSimSlotSF::DoBackoff()
 {
+  	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
   	Time backoffTime = MilliSeconds(m_rand->GetValue(0.0,10 * m_RTSTxTime.ToDouble(Time::MS)));
  
   	SlotSFStatus = BACKOFF;
@@ -600,6 +838,7 @@ void
 AquaSimSlotSF::DoRemote(Time DeltaTime)
 {
   	SlotSFStatus = REMOTE;
+  	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
 
   	if( Simulator::Now()+DeltaTime > m_remoteExpireTime ) {
       		m_remoteExpireTime = Simulator::Now()+DeltaTime;
@@ -618,6 +857,7 @@ AquaSimSlotSF::DoRemote(Time DeltaTime)
 void
 AquaSimSlotSF::ProcessRemoteTimer()
 {
+  	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
   	if( PktQ.empty() ) {
     		SlotSFStatus = PASSIVE;
   	}
@@ -631,6 +871,7 @@ void
 AquaSimSlotSF::BackoffTimerExpire()
 {
   	//SendRTS(2*m_maxPropDelay + m_RTSTxTime + m_CTSTxTime +m_estimateError);
+  	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
 	SendRTS(4*Seconds(m_slotLen));
 }
 
@@ -644,4 +885,19 @@ void AquaSimSlotSF::DoDispose()
 	AquaSimMac::DoDispose();
 }
 
-} // namespace ns2
+void
+AquaSimSlotSF::EndRecv()
+{
+  	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
+	isReceived = false;
+}
+
+void
+AquaSimSlotSF::AfterRecvProcess(SlotSFHeader ssfh)
+{
+	Time delay = Seconds(ssfh.GetSize()/m_dataRate);
+	Simulator::Schedule(delay, &AquaSimSlotSF::EndRecv, this);
+	NS_LOG_FUNCTION("Call" << AquaSimAddress::ConvertFrom(m_device->GetAddress()) << "Now" << Simulator::Now() << "Delay" << delay);
+}
+
+} // namespace ns3

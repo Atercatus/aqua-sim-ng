@@ -94,12 +94,12 @@ protected:
   Ptr<Packet> MakeND(); //broadcast
   Ptr<Packet> MakeRTS(AquaSimAddress Recver);
   Ptr<Packet> MakeCTS(AquaSimAddress RTS_Sender);
-  Ptr<Packet> MakeRELAY_CTS(AquaSimAddress RTS_Sender);
+  Ptr<Packet> MakeRELAY_CTS();
 
   void ProcessND(AquaSimAddress sa);
-  void ProcessRTS(SFHeader sfh, Ptr<Packet> pkt);
+  void ProcessRTS(Ptr<Packet> pkt);
   void ProcessCTS(SFHeader sfh);
-  bool ProcessDATA(SFHeader sfh, Ptr<Packet> pkt);
+  bool ProcessDATA(Ptr<Packet> pkt);
   void ProcessRELAY_CTS(SFHeader sfh);
 
   void SendRTS(Time DeltaTime);
@@ -117,16 +117,19 @@ protected:
   bool CarrierDected();
   void DoBackoff();
   void DoRemote(Time DeltaTime);
-
   virtual void DoDispose();
 
   //sf-mac
-  
+  void EndRecv();
+  void AfterRecvProcess(SFHeader sfh);
 
 private:
   //sf-mac
+  double m_dataRate;
   std::queue<Ptr<Packet>> m_rtsQ;
   Time m_RTSCPTime;
+  bool isReceived;  
+
   int m_sfNDCounter;
   Ptr<UniformRandomVariable> m_rand;
 };

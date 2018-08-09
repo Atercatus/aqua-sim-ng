@@ -23,6 +23,7 @@
 
 #include "ns3/random-variable-stream.h"
 #include "aqua-sim-mac.h"
+#include "aqua-sim-header-mac.h"
 #include "ns3/timer.h"
 
 #include <queue>
@@ -39,7 +40,6 @@ class AquaSimAddress;
 /**
  * \ingroup aqua-sim-ng
  *
- * \brief FAMA implementation
  */
 class AquaSimSlotSF: public AquaSimMac {
 public:
@@ -59,6 +59,7 @@ protected:
     WAIT_CTS,
     WAIT_DATA_FINISH,
     WAIT_DATA,
+    WAIT_ND_ACK,
     REMOTE   /*I don't know what it means. but
 		     node can only receive packet in this status*/
   }SlotSFStatus;
@@ -84,6 +85,7 @@ protected:
   std::vector<AquaSimAddress> NeighborList;
 
   Timer m_waitCTSTimer;
+  
   Timer m_backoffTimer;
   Timer m_remoteTimer;
   Time m_remoteExpireTime;
@@ -94,14 +96,18 @@ protected:
   Ptr<Packet> MakeND(); //broadcast
   Ptr<Packet> MakeRTS(AquaSimAddress Recver);
   Ptr<Packet> MakeCTS(AquaSimAddress RTS_Sender);
+  Ptr<Packet> MakeRELAY_CTS(); 
+  Ptr<Packet> MakeND_ACK(Ptr<Packet> pkt);
 
-  void ProcessND(AquaSimAddress sa);
-  void ProcessRTS(AquaSimAddress sa);
-  //void ProcessRTS(FamaHeader FamaH);
-  //void ProcessCTS(FamaHeader FamaH);
-  //void ProcessDATA(FamaHeader FamaH);
+  void ProcessND(Ptr<Packet> pkt);
+  void ProcessRTS(Ptr<Packet> pkt);
+  void ProcessCTS(SlotSFHeader ssfh);
+  bool ProcessDATA(Ptr<Packet> pkt);
+  void ProcessRELAY_CTS(SlotSFHeader ssfh);
+  void ProcessND_ACK(Ptr<Packet> pkt);
 
   void SendRTS(Time DeltaTime);
+  void SendCTS();
   void SendPkt(Ptr<Packet> pkt);
   void SendDataPkt();
 
@@ -115,16 +121,26 @@ protected:
   bool CarrierDected();
   void DoBackoff();
   void DoRemote(Time DeltaTime);
+  virtual void DoDispose();
 
+  //slot-sf-mac
   void InitSlotLen();
   double GetTime2ComingSlot(double t);
+  void EndRecv();
+  void AfterRecvProcess(SlotSFHeader ssfh); 
 
-  virtual void DoDispose();
 
 private:
   // slot based
   double m_slotLen;
   double m_guardTime;
+  double m_dataRate;
+  std::queue<Ptr<Packet>> m_rtsQ;
+  Time m_RTSCPTime;
+  bool isReceived;
+  double m_rctSlotTime;
+  std::vector<Time> DelayList;
+
 
   int m_slotsfNDCounter;
   Ptr<UniformRandomVariable> m_rand;

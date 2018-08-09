@@ -621,7 +621,7 @@ SFHeader::Print (std::ostream &os) const
     case RTS: os << "RTS"; break;
     case CTS: os << "CTS"; break;
     case RELAY_CTS: os << "RELAY_CTS"; break;
-    case FAMA_DATA: os << "FAMA_DATA"; break;
+    case DATA: os << "DATA"; break;
     case ND: os << "ND"; break;
   }
   os << "\n";
@@ -632,8 +632,228 @@ SFHeader::GetInstanceTypeId(void) const
   return GetTypeId();
 }
 
+int
+SFHeader::GetSize()
+{
+	int pkt_size = 0;
 
+	switch(m_pType)
+	{
+		case RTS:
+			pkt_size = 30; // 20(DCF) + 8(TimeStamp) + etc	
+			break;
+		case CTS:
+			pkt_size = 30; // 20(DCF) + 8(TimeStamp) + etc
+			break;
+		case RELAY_CTS:
+			pkt_size = 30; // 20(DCF) + 8(TimeStamp) + etc
+			break;
+		case ND:
+			pkt_size = 40; // 20 + 8*2 + etc
+			break;
+		case DATA:
+			pkt_size = 1600;
+			break;		
+	}
 
+	return pkt_size;
+}
+
+/*
+ * SlotSFHeader
+ */
+SlotSFHeader::SlotSFHeader()
+{
+/*    	m_sendTime = Seconds(0);
+	m_receiveTime = Seconds(0);
+	m_replyTime = Seconds(0);
+	m_recvProcessTime = Seconds(0);*/
+}
+
+SlotSFHeader::~SlotSFHeader()
+{
+}
+
+TypeId
+SlotSFHeader::GetTypeId()
+{
+  static TypeId tid = TypeId("ns3::SlotSFHeader")
+    .SetParent<Header>()
+    .AddConstructor<SlotSFHeader>()
+  ;
+  return tid;
+}
+
+int
+SlotSFHeader::size()
+{
+  return sizeof(AquaSimAddress)*4 + 1; /*for packet_type*/
+}
+void
+SlotSFHeader::SetSA(AquaSimAddress sa)
+{
+  SA = sa;
+}
+void
+SlotSFHeader::SetDA(AquaSimAddress da)
+{
+  DA = da;
+}
+void
+SlotSFHeader::SetPType(uint8_t pType)
+{
+  m_pType = pType;
+}
+AquaSimAddress
+SlotSFHeader::GetSA()
+{
+  return SA;
+}
+AquaSimAddress
+SlotSFHeader::GetDA()
+{
+  return DA;
+}
+uint8_t
+SlotSFHeader::GetPType()
+{
+  return m_pType;
+}
+
+uint32_t
+SlotSFHeader::GetSerializedSize(void) const
+{
+  //return 2+2+2+2+2+2+1;
+  return 2+2+1;
+}
+void
+SlotSFHeader::Serialize (Buffer::Iterator start) const
+{
+  start.WriteU16 (SA.GetAsInt());
+  start.WriteU16 (DA.GetAsInt());
+  //start.WriteU16 (m_sendTime.ToDouble(Time::S));
+  //start.WriteU16 (m_receiveTime.ToDouble(Time::S));
+  //start.WriteU16 (m_replyTime.ToDouble(Time::S));
+  //start.WriteU16 (m_recvProcessTime.ToDouble(Time::S));
+  //start.WriteU8 (SA.GetLength());
+  //start.WriteU8 (DA.GetLength());
+  start.WriteU8 (m_pType);
+}
+uint32_t
+SlotSFHeader::Deserialize (Buffer::Iterator start)
+{
+  Buffer::Iterator i = start;
+  SA = (AquaSimAddress) i.ReadU16();
+  DA = (AquaSimAddress) i.ReadU16();
+  //m_sendTime = (Time) i.ReadU16();
+  //m_receiveTime = (Time) i.ReadU16();
+  //m_replyTime = (Time) i.ReadU16();
+  //m_recvProcessTime = (Time) i.ReadU16();
+  //ReadFrom(i, SA,8);	//read 8bit addr
+  //ReadFrom(i, DA, 8);	//read 8bit addr
+  m_pType = i.ReadU8();
+
+  return GetSerializedSize();
+}
+void
+SlotSFHeader::Print (std::ostream &os) const
+{
+  os << "SlotSF Header: SendAddress=" << SA << ", DestAddress=" << DA << ", PacketType=";
+  switch(m_pType)
+  {
+    case RTS: os << "RTS"; break;
+    case CTS: os << "CTS"; break;
+    case RELAY_CTS: os << "RELAY_CTS"; break;
+    case DATA: os << "DATA"; break;
+    case ND: os << "ND"; break;
+    case ND_ACK: os << "ND_ACK"; break;
+  }
+  os << "\n";
+}
+TypeId
+SlotSFHeader::GetInstanceTypeId(void) const
+{
+  return GetTypeId();
+}
+
+int
+SlotSFHeader::GetSize()
+{
+	int pkt_size = 0;
+
+	switch(m_pType)
+	{
+		case RTS:
+			pkt_size = 30; // 20(DCF) + 8(TimeStamp) + etc	
+			break;
+		case CTS:
+			pkt_size = 30; // 20(DCF) + 8(TimeStamp) + etc
+			break;
+		case RELAY_CTS:
+			pkt_size = 30; // 20(DCF) + 8(TimeStamp) + etc
+			break;
+		case ND:
+			pkt_size = 40; // 20 + 8*2 + etc
+			break;
+		case ND_ACK:
+			pkt_size = 55; // 20 + 8*4 + etc
+			break;
+		case DATA:
+			pkt_size = 1600;
+			break;		
+	}
+
+	return pkt_size;
+}
+/*
+void
+SlotSFHeader::SetSendTime(Time SendTime)
+{
+	m_sendTime = SendTime;
+}
+
+void 
+SlotSFHeader::SetReceiveTime(Time ReceiveTime)
+{
+	m_receiveTime = ReceiveTime;	
+}
+
+void
+SlotSFHeader::SetReplyTime(Time ReplyTime)
+{
+	m_replyTime = ReplyTime;
+}
+
+void
+SlotSFHeader::SetRecvProcessTime(Time RecvProcessTime)
+{
+	m_recvProcessTime = RecvProcessTime;
+}
+
+Time
+SlotSFHeader::GetSendTime()
+{
+	return m_sendTime;
+}
+
+Time
+SlotSFHeader::GetReceiveTime()
+{
+	return m_receiveTime;
+}
+
+Time
+SlotSFHeader::GetReplyTime()
+{
+	return m_replyTime;
+}
+
+Time
+SlotSFHeader::GetRecvProcessTime()
+{
+	return m_recvProcessTime;
+}
+*/
 /*
  * CopeHeader
  */
@@ -763,9 +983,10 @@ int
 SFamaHeader::GetSize(enum PacketType pType)
 {
   int pkt_size = 2*sizeof(Address); //source and destination addr in hdr_mac
-
+  NS_LOG_FUNCTION("pkt_size" << pkt_size);
   if( pType == SFAMA_RTS || pType == SFAMA_CTS ) {
     pkt_size += sizeof(uint16_t)+1; //size of packet_type and slotnum
+    NS_LOG_FUNCTION("pkt_size2" << pkt_size);
   }
 
   return pkt_size;

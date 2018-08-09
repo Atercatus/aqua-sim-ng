@@ -31,6 +31,7 @@
 #include "aqua-sim-address.h"
 //#include "aqua-sim-routing-buffer.h"
 #include "aqua-sim-datastructure.h"
+#include "ns3/nstime.h"
 
 namespace ns3 {
 
@@ -226,8 +227,10 @@ enum PacketType {
   RTS,	//the previous forwarder thinks this is DATA-ACK
   CTS,
   RELAY_CTS,
-  FAMA_DATA,
-  ND		//neighbor discovery. need know neighbors, so it can be used as next hop.
+  DATA,
+  ND,		//neighbor discovery. need know neighbors, so it can be used as next hop.
+ // ND_ACK
+
   //ACK 
 } packet_type;
 
@@ -244,6 +247,9 @@ AquaSimAddress GetSA();
 AquaSimAddress GetDA();
 uint8_t GetPType();	//Remove Set/Get pType and go directly to public variable??
 
+//SFHeader
+int GetSize();
+
 //inherited methods
 virtual uint32_t GetSerializedSize(void) const;
 virtual void Serialize (Buffer::Iterator start) const;
@@ -254,7 +260,73 @@ private:
 AquaSimAddress SA;
 AquaSimAddress DA;
 uint8_t m_pType;
-};  // class FamaHeader
+};  // class SFHeader
+
+
+/**
+* \brief Slot SF header
+*/
+class SlotSFHeader : public Header
+{
+public:
+enum PacketType {
+  RTS,	//the previous forwarder thinks this is DATA-ACK
+  CTS,
+  RELAY_CTS,
+  DATA,
+  ND,		//neighbor discovery. need know neighbors, so it can be used as next hop.
+  ND_ACK
+
+  //ACK 
+} packet_type;
+
+SlotSFHeader();
+virtual ~SlotSFHeader();
+static TypeId GetTypeId(void);
+
+static int size();
+
+void SetSA(AquaSimAddress sa);
+void SetDA(AquaSimAddress da);
+void SetPType(uint8_t pType);
+AquaSimAddress GetSA();
+AquaSimAddress GetDA();
+uint8_t GetPType();	//Remove Set/Get pType and go directly to public variable??
+
+//SlotSFHeader
+int GetSize();
+
+//inherited methods
+virtual uint32_t GetSerializedSize(void) const;
+virtual void Serialize (Buffer::Iterator start) const;
+virtual uint32_t Deserialize (Buffer::Iterator start);
+virtual void Print (std::ostream &os) const;
+virtual TypeId GetInstanceTypeId(void) const;
+
+/*
+	//need to calc delay
+	void SetSendTime(Time SendTime);
+	void SetReceiveTime(Time ReceiveTime);
+	void SetReplyTime(Time ReplyTime);
+	void SetRecvProcessTime(Time RecvProcessTime);	
+	
+	Time GetSendTime();
+	Time GetReceiveTime();
+	Time GetReplyTime();
+	Time GetRecvProcessTime();
+*/
+
+private:
+AquaSimAddress SA;
+AquaSimAddress DA;
+uint8_t m_pType;
+
+	/*//need to calc delay
+	Time m_sendTime;
+	Time m_receiveTime;
+	Time m_replyTime;
+	Time m_recvProcessTime;*/
+};  // class SlotSFHeader
 
 
 
