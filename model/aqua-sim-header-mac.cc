@@ -664,7 +664,7 @@ SFHeader::GetSize()
  */
 SlotSFHeader::SlotSFHeader()
 {
-/*    	m_sendTime = Seconds(0);
+    	/*m_sendTime = Seconds(0);
 	m_receiveTime = Seconds(0);
 	m_replyTime = Seconds(0);
 	m_recvProcessTime = Seconds(0);*/
@@ -723,7 +723,7 @@ SlotSFHeader::GetPType()
 uint32_t
 SlotSFHeader::GetSerializedSize(void) const
 {
-  //return 2+2+2+2+2+2+1;
+  //return 2+2+8+8+8+8+1;
   return 2+2+1;
 }
 void
@@ -731,10 +731,10 @@ SlotSFHeader::Serialize (Buffer::Iterator start) const
 {
   start.WriteU16 (SA.GetAsInt());
   start.WriteU16 (DA.GetAsInt());
-  //start.WriteU16 (m_sendTime.ToDouble(Time::S));
-  //start.WriteU16 (m_receiveTime.ToDouble(Time::S));
-  //start.WriteU16 (m_replyTime.ToDouble(Time::S));
-  //start.WriteU16 (m_recvProcessTime.ToDouble(Time::S));
+  //start.WriteU64 (m_sendTime);
+  //start.WriteU64 (m_receiveTime);
+  //start.WriteU64 (m_replyTime);
+  //start.WriteU64 (m_recvProcessTime);
   //start.WriteU8 (SA.GetLength());
   //start.WriteU8 (DA.GetLength());
   start.WriteU8 (m_pType);
@@ -745,10 +745,10 @@ SlotSFHeader::Deserialize (Buffer::Iterator start)
   Buffer::Iterator i = start;
   SA = (AquaSimAddress) i.ReadU16();
   DA = (AquaSimAddress) i.ReadU16();
-  //m_sendTime = (Time) i.ReadU16();
-  //m_receiveTime = (Time) i.ReadU16();
-  //m_replyTime = (Time) i.ReadU16();
-  //m_recvProcessTime = (Time) i.ReadU16();
+  //m_sendTime = i.ReadU64();
+  //m_receiveTime = i.ReadU64();
+  //m_replyTime = i.ReadU64();
+  //m_recvProcessTime = i.ReadU64();
   //ReadFrom(i, SA,8);	//read 8bit addr
   //ReadFrom(i, DA, 8);	//read 8bit addr
   m_pType = i.ReadU8();
@@ -766,7 +766,7 @@ SlotSFHeader::Print (std::ostream &os) const
     case RELAY_CTS: os << "RELAY_CTS"; break;
     case DATA: os << "DATA"; break;
     case ND: os << "ND"; break;
-    case ND_ACK: os << "ND_ACK"; break;
+    //case ND_ACK: os << "ND_ACK"; break;
   }
   os << "\n";
 }
@@ -795,9 +795,9 @@ SlotSFHeader::GetSize()
 		case ND:
 			pkt_size = 40; // 20 + 8*2 + etc
 			break;
-		case ND_ACK:
-			pkt_size = 55; // 20 + 8*4 + etc
-			break;
+		//case ND_ACK:
+		//	pkt_size = 55; // 20 + 8*4 + etc
+		//	break;
 		case DATA:
 			pkt_size = 1600;
 			break;		
@@ -809,49 +809,49 @@ SlotSFHeader::GetSize()
 void
 SlotSFHeader::SetSendTime(Time SendTime)
 {
-	m_sendTime = SendTime;
+	m_sendTime = SendTime.ToDouble(Time::S);
 }
 
 void 
 SlotSFHeader::SetReceiveTime(Time ReceiveTime)
 {
-	m_receiveTime = ReceiveTime;	
+	m_receiveTime = ReceiveTime.ToDouble(Time::S);	
 }
 
 void
 SlotSFHeader::SetReplyTime(Time ReplyTime)
 {
-	m_replyTime = ReplyTime;
+	m_replyTime = ReplyTime.ToDouble(Time::S);
 }
 
 void
 SlotSFHeader::SetRecvProcessTime(Time RecvProcessTime)
 {
-	m_recvProcessTime = RecvProcessTime;
+	m_recvProcessTime = RecvProcessTime.ToDouble(Time::S);
 }
 
 Time
 SlotSFHeader::GetSendTime()
 {
-	return m_sendTime;
+	return Seconds(m_sendTime);
 }
 
 Time
 SlotSFHeader::GetReceiveTime()
 {
-	return m_receiveTime;
+	return Seconds(m_receiveTime);
 }
 
 Time
 SlotSFHeader::GetReplyTime()
 {
-	return m_replyTime;
+	return Seconds(m_replyTime);
 }
 
 Time
 SlotSFHeader::GetRecvProcessTime()
 {
-	return m_recvProcessTime;
+	return Seconds(m_recvProcessTime);
 }
 */
 /*

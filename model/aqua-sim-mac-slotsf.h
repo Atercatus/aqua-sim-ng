@@ -59,7 +59,7 @@ protected:
     WAIT_CTS,
     WAIT_DATA_FINISH,
     WAIT_DATA,
-    WAIT_ND_ACK,
+    //WAIT_ND_ACK,
     REMOTE   /*I don't know what it means. but
 		     node can only receive packet in this status*/
   }SlotSFStatus;
@@ -97,14 +97,14 @@ protected:
   Ptr<Packet> MakeRTS(AquaSimAddress Recver);
   Ptr<Packet> MakeCTS(AquaSimAddress RTS_Sender);
   Ptr<Packet> MakeRELAY_CTS(); 
-  Ptr<Packet> MakeND_ACK(Ptr<Packet> pkt);
+  //Ptr<Packet> MakeND_ACK(AquaSimAddress ND_Sender);
 
   void ProcessND(Ptr<Packet> pkt);
   void ProcessRTS(Ptr<Packet> pkt);
   void ProcessCTS(SlotSFHeader ssfh);
   bool ProcessDATA(Ptr<Packet> pkt);
   void ProcessRELAY_CTS(SlotSFHeader ssfh);
-  void ProcessND_ACK(Ptr<Packet> pkt);
+  //void ProcessND_ACK(Ptr<Packet> pkt);
 
   void SendRTS(Time DeltaTime);
   void SendCTS();
@@ -128,7 +128,8 @@ protected:
   double GetTime2ComingSlot(double t);
   void EndRecv();
   void AfterRecvProcess(SlotSFHeader ssfh); 
-
+  int FindDelayIndex(AquaSimAddress address);
+  void PushNeighborData(AquaSimAddress sa, Time delay);
 
 private:
   // slot based
@@ -139,6 +140,8 @@ private:
   Time m_RTSCPTime;
   bool isReceived;
   double m_rctSlotTime;
+  double m_delay;
+  Time m_rcntRecvTime;
   std::vector<Time> DelayList;
 
 

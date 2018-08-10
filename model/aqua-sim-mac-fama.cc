@@ -432,6 +432,8 @@ AquaSimFama::ProcessRTS(AquaSimAddress sa)
 {
   	//FamaHeader FamaH;
   	//pkt->PeekHeader(FamaH);
+  	
+
   	SendPkt( MakeCTS(sa) );
   	FamaStatus = WAIT_DATA;
 }

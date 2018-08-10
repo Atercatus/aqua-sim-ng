@@ -274,8 +274,8 @@ enum PacketType {
   CTS,
   RELAY_CTS,
   DATA,
-  ND,		//neighbor discovery. need know neighbors, so it can be used as next hop.
-  ND_ACK
+  ND		//neighbor discovery. need know neighbors, so it can be used as next hop.
+  //ND_ACK
 
   //ACK 
 } packet_type;
@@ -303,7 +303,7 @@ virtual uint32_t Deserialize (Buffer::Iterator start);
 virtual void Print (std::ostream &os) const;
 virtual TypeId GetInstanceTypeId(void) const;
 
-/*
+	/*
 	//need to calc delay
 	void SetSendTime(Time SendTime);
 	void SetReceiveTime(Time ReceiveTime);
@@ -314,18 +314,18 @@ virtual TypeId GetInstanceTypeId(void) const;
 	Time GetReceiveTime();
 	Time GetReplyTime();
 	Time GetRecvProcessTime();
-*/
+	*/
 
 private:
 AquaSimAddress SA;
 AquaSimAddress DA;
 uint8_t m_pType;
 
-	/*//need to calc delay
-	Time m_sendTime;
-	Time m_receiveTime;
-	Time m_replyTime;
-	Time m_recvProcessTime;*/
+	//need to calc delay
+	//double m_sendTime;
+	//double m_receiveTime;
+	//double m_replyTime;
+	//double m_recvProcessTime;
 };  // class SlotSFHeader
 
 
