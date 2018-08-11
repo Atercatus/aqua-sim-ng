@@ -173,6 +173,11 @@ AquaSimSlotSF::SendPkt(Ptr<Packet> pkt)
       			break;
     		case RECV:
       			NS_LOG_WARN("RECV-SEND Collision!!!!!");
+      			startTime = Simulator::Now() + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S)));
+			asHeader.SetTimeStamp(startTime);
+			pkt->AddHeader(mach);
+			pkt->AddHeader(asHeader);
+      			Simulator::Schedule(startTime - Simulator::Now(), &AquaSimSlotSF::SendPkt, this, pkt);
       			pkt=0;
       			break;
     		default:
@@ -240,11 +245,13 @@ AquaSimSlotSF::TxProcess(Ptr<Packet> pkt)
   	if( (PktQ.size() == 1) /*the pkt is the first one*/ && SlotSFStatus == PASSIVE ) {
       		if( CarrierDected() ) {
 	 		//DoRemote(2*m_maxPropDelay+m_estimateError);
-	 		DoRemote(2*Seconds(m_slotLen));;
+	 		DoRemote(2*Seconds(m_slotLen) + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S))) - Simulator::Now());
+	 		//DoRemote(2*Seconds(m_slotLen));
       		}
       		else{
 	 	//	SendRTS(2*m_maxPropDelay+m_CTSTxTime+m_RTSTxTime+m_estimateError);
-      			SendRTS(4*Seconds(m_slotLen));
+      			SendRTS(4*Seconds(m_slotLen) + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S))) - Simulator::Now());
+      			//SendRTS(4*Seconds(m_slotLen));
 		}
   	}	
   	return true;
@@ -284,7 +291,8 @@ AquaSimSlotSF::RecvProcess(Ptr<Packet> pkt)
   	if( m_backoffTimer.IsRunning() ) {
       		m_backoffTimer.Cancel();
       		//DoRemote(2*m_maxPropDelay+m_estimateError);
-		DoRemote(2*Seconds(m_slotLen));
+		//DoRemote(2*Seconds(m_slotLen));
+	 	DoRemote(2*Seconds(m_slotLen) + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S))) - Simulator::Now());
   	} 
 	else if( m_remoteTimer.IsRunning() ) {
       		m_remoteTimer.Cancel();
@@ -301,7 +309,8 @@ AquaSimSlotSF::RecvProcess(Ptr<Packet> pkt)
   	{
 		pkt=0;
 
-		DoRemote(2*Seconds(m_slotLen));
+		//DoRemote(2*Seconds(m_slotLen));
+	 	DoRemote(2*Seconds(m_slotLen) + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S))) - Simulator::Now());
       		return false;
   	}
 
@@ -365,7 +374,9 @@ AquaSimSlotSF::SendDataPkt()
 			//NS_LOG_FUNCTION("Now" << Simulator::Now() << "TimeStamp:" << asHeader.GetTimeStamp() << "startTime" << startTime);		
 			//Simulator::Schedule(startTime, &AquaSimSlotSF::ProcessDataSendTimer, this, tmp);
 			//tmp->AddHeader();
-			Simulator::Schedule(Seconds(0), &AquaSimSlotSF::ProcessDataSendTimer, this, tmp);
+			Time startTime = Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S)));
+			Simulator::Schedule(startTime, &AquaSimSlotSF::ProcessDataSendTimer, this, tmp);
+			//Simulator::Schedule(Seconds(0), &AquaSimSlotSF::ProcessDataSendTimer, this, tmp);
         		//PktQ.front()->PeekHeader(asHeader);
 
 			if(PktQ.empty()){
@@ -401,7 +412,7 @@ AquaSimSlotSF::ProcessDataSendTimer(Ptr<Packet> pkt)
 	pkt->AddHeader(mach);
 	pkt->AddHeader(asHeader);
 	NS_LOG_FUNCTION("Call:" << AquaSimAddress::ConvertFrom(m_device->GetAddress()) << "Now" << Simulator::Now() << "TimeStamp:" << asHeader.GetTimeStamp() << "startTime" << startTime
-				<< "delay" << delay << "DelayList" << DelayList[index]);		
+				<< "delay" << delay); /*<< "DelayList" << DelayList[index]);		*/
 
 	Simulator::Schedule(startTime - Simulator::Now(), &AquaSimSlotSF::SendPkt, this, pkt);
 }
@@ -578,23 +589,20 @@ AquaSimSlotSF::ProcessRTS(Ptr<Packet> pkt)
 		{
 			Ptr<Packet> pkt = MakeRELAY_CTS();
 			pkt->PeekHeader(asHeader);
-			NS_LOG_FUNCTION("before schedule" << "Timestamp" << asHeader.GetTimeStamp() << "Now" << Simulator::Now());
 			
 			Simulator::Schedule(asHeader.GetTimeStamp() - Simulator::Now(), &AquaSimSlotSF::SendPkt, this, pkt);	
-			NS_LOG_FUNCTION("After schedule");
 			//SendPkt(MakeRELAY_CTS(ssfh.GetSA()));
 			SlotSFStatus = WAIT_DATA;
 			Simulator::Schedule(m_RTSCPTime, &AquaSimSlotSF::SendCTS, this);
 		}	
 	
 		m_rtsQ.push(pkt);
-		
-
-	NS_LOG_FUNCTION("after push");
 	}  	
 
 	NS_LOG_FUNCTION("masaka");
-	DoRemote(5*m_maxPropDelay+m_estimateError+m_RTSCPTime);
+	//DoRemote(5*m_maxPropDelay+m_estimateError+m_RTSCPTime + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S))) - Simulator::Now());
+	DoRemote(2*Seconds(m_slotLen) + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S))) - Simulator::Now());
+	//DoRemote(2*Seconds(m_slotLen));
 }
 
 void
@@ -727,7 +735,9 @@ AquaSimSlotSF::ProcessRELAY_CTS(SlotSFHeader ssfh)
 {
   	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
 	if(ssfh.GetDA() != m_device->GetAddress()) {
-		DoRemote(m_maxPropDelay + m_estimateError + m_RTSCPTime);
+		//DoRemote(m_maxPropDelay + m_estimateError + m_RTSCPTime + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S))) - Simulator::Now());
+	 	DoRemote(2*Seconds(m_slotLen) + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S))) - Simulator::Now());;
+	 	//DoRemote(2*Seconds(m_slotLen));
 	}
 }
 
@@ -746,7 +756,9 @@ AquaSimSlotSF::ProcessCTS(SlotSFHeader ssfh)
 		}
 	}
 
-	DoRemote(2*Seconds(m_slotLen));
+	//DoRemote(2*Seconds(m_slotLen));
+	DoRemote(2*Seconds(m_slotLen) + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S))) - Simulator::Now());;
+	//DoRemote(2*Seconds(m_slotLen));
 }
 
 bool
@@ -768,7 +780,9 @@ AquaSimSlotSF::ProcessDATA(Ptr<Packet> pkt)
 		return true;
 	}
 	else {
-		DoRemote(Seconds(m_slotLen));
+		//DoRemote(Seconds(m_slotLen));
+	 	DoRemote(1*Seconds(m_slotLen)+ Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S))) - Simulator::Now());;
+	 	//DoRemote(1*Seconds(m_slotLen));
 		return false;
 	}
 }
@@ -838,7 +852,8 @@ AquaSimSlotSF::BackoffTimerExpire()
 {
   	//SendRTS(2*m_maxPropDelay + m_RTSTxTime + m_CTSTxTime +m_estimateError);
   	NS_LOG_FUNCTION(AquaSimAddress::ConvertFrom(m_device->GetAddress()));
-	SendRTS(4*Seconds(m_slotLen));
+	SendRTS(4*Seconds(m_slotLen) + Seconds(GetTime2ComingSlot(Simulator::Now().ToDouble(Time::S))) - Simulator::Now());
+	//SendRTS(4*Seconds(m_slotLen));
 }
 
 void AquaSimSlotSF::DoDispose()
